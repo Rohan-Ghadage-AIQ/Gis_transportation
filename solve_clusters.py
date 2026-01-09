@@ -47,26 +47,37 @@ def solve_clusters():
     transit_callback_index = routing.RegisterTransitCallback(distance_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-    # --- ADDED: BALANCING LOGIC (Correctly Indented) ---
+# --- UPDATED: BALANCING LOGIC ---
+    # 1. Distance Dimension: High limit to prevent "No Solution"
     dimension_name = 'Distance'
     routing.AddDimension(
         transit_callback_index,
-        0,      # no slack
-        1000000, # maximum distance (increased to avoid "No Solution" errors)
-        True,   # start cumul to zero
-        dimension_name)
-
+        0, 10000000, True, dimension_name) # Increased to 10M
     distance_dimension = routing.GetDimensionOrDie(dimension_name)
-    # This coefficient forces the solver to balance the 5 routes
     distance_dimension.SetGlobalSpanCostCoefficient(100)
 
-    # 4. Solve
+    # 2. Capacity Dimension: Forces nodes to be spread across vehicles
+    def demand_callback(from_index):
+        # Each station is 1 unit, warehouse is 0
+        node = manager.IndexToNode(from_index)
+        return 1 if node != node_to_idx[depot_node] else 0
+
+    demand_callback_index = routing.RegisterUnaryTransitCallback(demand_callback)
+    routing.AddDimension(
+        demand_callback_index,
+        0, 10, True, 'Capacity') # Max 10 stops per vehicle
+
+    # --- UPDATED: SEARCH PARAMETERS ---
     search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+    # Parallel Cheapest Insertion is better at finding an initial balanced state
     search_parameters.first_solution_strategy = (
-        routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC)
+        routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION)
+    search_parameters.local_search_metaheuristic = (
+        routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH)
+    search_parameters.time_limit.seconds = 10
     
     solution = routing.SolveWithParameters(search_parameters)
-
+    
     # 5. Output Results
     if solution:
         print("Successfully created 5 balanced clusters:")
