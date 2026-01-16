@@ -17,7 +17,7 @@ def get_db_connection():
     )
 
 def save_route_geometry(conn, vehicle_id, route_nodes):
-    """Saves road geometries as MultiLineStrings."""
+    """Saves road geometries as MultiLineStrings using pgRouting."""
     cur = conn.cursor()
     cur.execute("DELETE FROM vector.route_geometries WHERE vehicle_id = %s", (vehicle_id,))
     
@@ -36,18 +36,20 @@ def save_route_geometry(conn, vehicle_id, route_nodes):
         """
         cur.execute(insert_query)
     conn.commit()
-    print(f"  -> Road geometry for Vehicle {vehicle_id} saved.")
 
 def solve_sequences():
-    # --- CONFIGURATION ---
-    num_clusters = 5
+    # --- 1. CONFIGURATION ---
+    # FORCED DIVISION: Setting capacity to 70kg forces the spread across all 8 vehicles
+    vehicle_capacities = [25,25,25,25,25,25,25,25] 
+    num_vehicles = len(vehicle_capacities)
+    
     warehouse_lon = 72.8724 
     warehouse_lat = 19.0725
     
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # 1. Dynamic Warehouse Snapping
+    # 2. Dynamic Warehouse Snapping
     cur.execute(f"""
         SELECT m.node FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m
         JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node)
@@ -57,73 +59,127 @@ def solve_sequences():
     depot_node = cur.fetchone()[0]
     print(f"Warehouse Snapped to Node: {depot_node}")
 
-    # 2. Cluster Creation
-    cur.execute("CREATE TABLE IF NOT EXISTS vector.route_geometries (vehicle_id integer, geom geometry);")
-    cur.execute("DROP TABLE IF EXISTS vector.final_station_clusters;")
-    cur.execute("""
-        CREATE TABLE vector.final_station_clusters AS
-        SELECT station_id, nearest_node_id, ST_ClusterKMeans(geom, 5) OVER () AS cluster_id, geom
-        FROM vector.station_node_map;
+    # 3. Fetch stations and weights
+    cur.execute("SELECT nearest_node_id, parcel_weight, station_id FROM vector.station_node_map")
+    rows = cur.fetchall()
+    
+    station_nodes = [row[0] for row in rows]
+    station_weights = [row[1] for row in rows]
+    station_ids_list = [row[2] for row in rows]
+    
+    nodes_in_system = [depot_node] + station_nodes
+    node_demands = [0] + station_weights 
+    
+    # Precise mapping to ensure station_id is retrieved correctly during the loop
+    # Index 0 is the Depot (None)
+    node_to_station_map = {nodes_in_system[i]: ([None] + station_ids_list)[i] for i in range(len(nodes_in_system))}
+    
+    size = len(nodes_in_system)
+    node_to_idx = {node: i for i, node in enumerate(nodes_in_system)}
+    idx_to_node = {i: node for node, i in node_to_idx.items()}
+
+    # 4. Fetch Distance Matrix
+    node_ids_str = ",".join(map(str, nodes_in_system))
+    cur.execute(f"""
+        SELECT start_vid, end_vid, agg_cost FROM vector.distance_matrix 
+        WHERE start_vid IN ({node_ids_str}) AND end_vid IN ({node_ids_str})
     """)
-    conn.commit()
+    
+    dist_matrix = [[999999] * size for _ in range(size)]
+    for i in range(size): dist_matrix[i][i] = 0
+    for u, v, cost in cur.fetchall():
+        if u in node_to_idx and v in node_to_idx:
+            dist_matrix[node_to_idx[u]][node_to_idx[v]] = int(cost)
 
-    # 3. Optimization Loop
-    for cluster_id in range(num_clusters):
-        cur.execute(f"SELECT nearest_node_id FROM vector.final_station_clusters WHERE cluster_id = {cluster_id}")
-        raw_stations = [row[0] for row in cur.fetchall()]
-        
-        # --- ROBUST DEDUPLICATION ---
-        nodes_in_cluster = [depot_node]
-        for s in raw_stations:
-            if s not in nodes_in_cluster:
-                nodes_in_cluster.append(s)
-        
-        size = len(nodes_in_cluster)
-        node_to_idx = {node: i for i, node in enumerate(nodes_in_cluster)}
-        idx_to_node = {i: node for node, i in node_to_idx.items()}
+    # 5. Solver Setup
+    manager = pywrapcp.RoutingIndexManager(size, num_vehicles, 0)
+    routing = pywrapcp.RoutingModel(manager)
 
-        # Fetch distances with strict node filtering
-        node_ids_str = ",".join(map(str, nodes_in_cluster))
-        cur.execute(f"""
-            SELECT start_vid, end_vid, agg_cost FROM vector.distance_matrix 
-            WHERE start_vid IN ({node_ids_str}) AND end_vid IN ({node_ids_str})
+    def distance_callback(from_index, to_index):
+        return dist_matrix[manager.IndexToNode(from_index)][manager.IndexToNode(to_index)]
+    
+    transit_callback_index = routing.RegisterTransitCallback(distance_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+
+    def demand_callback(from_index):
+        return node_demands[manager.IndexToNode(from_index)]
+    
+    demand_callback_index = routing.RegisterUnaryTransitCallback(demand_callback)
+    routing.AddDimensionWithVehicleCapacity(demand_callback_index, 0, vehicle_capacities, True, 'Capacity')
+
+    # GLOBAL SPAN: Ensures distance is balanced among all active vehicles
+    distance_dimension_name = 'Distance'
+    routing.AddDimension(transit_callback_index, 0, 1000000, True, distance_dimension_name)
+    distance_dimension = routing.GetDimensionOrDie(distance_dimension_name)
+    distance_dimension.SetGlobalSpanCostCoefficient(100)
+
+    # FIXED COST: Forcing the use of the entire fleet
+    for i in range(num_vehicles):
+        routing.SetFixedCostOfVehicle(5000, i)
+
+    # 6. Search Parameters
+    search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+    search_parameters.first_solution_strategy = (routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC)
+    search_parameters.time_limit.seconds = 30
+    search_parameters.local_search_metaheuristic = (routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH)
+
+    print("Solving for 8 balanced routes (30s limit)...")
+    solution = routing.SolveWithParameters(search_parameters)
+
+    # 7. Results and Table Updates
+    if solution:
+        cur.execute("CREATE TABLE IF NOT EXISTS vector.route_geometries (vehicle_id integer, geom geometry);")
+        cur.execute("DROP TABLE IF EXISTS vector.final_station_clusters;")
+        
+        # Creating a physical table with 'weight' column to match your pgAdmin query
+        cur.execute("""
+            CREATE TABLE vector.final_station_clusters (
+                station_id bigint, 
+                nearest_node_id bigint, 
+                cluster_id int, 
+                weight int, 
+                geom geometry
+            );
         """)
         
-        dist_matrix = [[999999] * size for _ in range(size)]
-        for i in range(size): dist_matrix[i][i] = 0
-        for u, v, cost in cur.fetchall():
-            if u in node_to_idx and v in node_to_idx:
-                dist_matrix[node_to_idx[u]][node_to_idx[v]] = int(cost)
-
-        # OR-Tools Solver
-        manager = pywrapcp.RoutingIndexManager(size, 1, 0)
-        routing = pywrapcp.RoutingModel(manager)
-
-        def distance_callback(from_index, to_index):
-            return dist_matrix[manager.IndexToNode(from_index)][manager.IndexToNode(to_index)]
-
-        routing.SetArcCostEvaluatorOfAllVehicles(routing.RegisterTransitCallback(distance_callback))
-        
-        search_parameters = pywrapcp.DefaultRoutingSearchParameters()
-        search_parameters.first_solution_strategy = (routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC)
-        
-        solution = routing.SolveWithParameters(search_parameters)
-
-        if solution:
-            index = routing.Start(0)
+        print("\nStep 2: Dividing weights and saving 8 vehicles to database...")
+        for vehicle_id in range(num_vehicles):
+            index = routing.Start(vehicle_id)
             route = []
+            route_weight = 0
+            
             while not routing.IsEnd(index):
-                # Now Index 8 will definitely exist in idx_to_node
-                route.append(idx_to_node[manager.IndexToNode(index)])
+                node_idx = manager.IndexToNode(index)
+                node_id = idx_to_node[node_idx]
+                route.append(node_id)
+                
+                weight = node_demands[node_idx]
+                route_weight += weight
+                
+                # If the current node is a delivery station (not the warehouse)
+                if node_id != depot_node:
+                    s_id = node_to_station_map[node_id]
+                    # Direct insert ensuring the column names match the report query
+                    cur.execute("""
+                        INSERT INTO vector.final_station_clusters (station_id, nearest_node_id, cluster_id, weight, geom)
+                        SELECT station_id, nearest_node_id, %s, parcel_weight, geom 
+                        FROM vector.station_node_map WHERE station_id = %s
+                    """, (vehicle_id + 1, s_id))
+                
                 index = solution.Value(routing.NextVar(index))
+            
             route.append(depot_node)
             
-            print(f"Vehicle {cluster_id + 1} Sequence: {' -> '.join(map(str, route))}")
-            save_route_geometry(conn, cluster_id + 1, route)
+            if len(route) > 2:
+                print(f"Vehicle {vehicle_id + 1} Load: {route_weight}kg")
+                save_route_geometry(conn, vehicle_id + 1, route)
+            else:
+                print(f"Vehicle {vehicle_id + 1}: Unused (Capacity sufficient without this vehicle).")
 
+    conn.commit()
     cur.close()
     conn.close()
-    print("\nProcess Complete. Categorize 'vector.route_geometries' by vehicle_id in QGIS.")
+    print("\nDONE. Every parcel is assigned. Check pgAdmin and refresh QGIS.")
 
 if __name__ == "__main__":
     solve_sequences()
