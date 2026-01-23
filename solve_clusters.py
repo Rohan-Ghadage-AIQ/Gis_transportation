@@ -37,22 +37,27 @@ def save_route_geometry(conn, vehicle_id, route_nodes):
     conn.commit()
 
 def solve_sequences():
-    # 1. SETUP: Lowered capacity to 155kg forces the spread across all 8 vehicles
-    vehicle_capacities = [300] * 8 
-    num_vehicles = len(vehicle_capacities)
-    warehouse_lon, warehouse_lat = 72.8724, 19.0725
-    
+    # 1. DATABASE CONNECTION & DATA FETCHING (Must come first)
     conn = get_db_connection()
     cur = conn.cursor()
+    warehouse_lon, warehouse_lat = 72.8724, 19.0725
 
-    # 2. FETCH DATA
+    # Fetch station data
     cur.execute("SELECT nearest_node_id, parcel_weight, station_id FROM vector.station_node_map")
     rows = cur.fetchall()
     
-    # Get Depot (Warehouse) node
-    cur.execute(f"SELECT m.node FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node) WHERE m.component = 11 ORDER BY r.geom <-> ST_SetSRID(ST_Point({warehouse_lon}, {warehouse_lat}), 4326) LIMIT 1;")
+    # Get Depot (Warehouse) node snapped to main network
+    cur.execute(f"""
+        SELECT m.node FROM pgr_connectedComponents(
+            'SELECT gid AS id, source, target, cost FROM vector.road_maharashtra'
+        ) m JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node) 
+        WHERE m.component = 11 
+        ORDER BY r.geom <-> ST_SetSRID(ST_Point({warehouse_lon}, {warehouse_lat}), 4326) 
+        LIMIT 1;
+    """)
     depot_node = cur.fetchone()[0]
 
+    # Map nodes to indices
     nodes_in_system = [depot_node] + [r[0] for r in rows]
     node_demands = [0] + [r[1] for r in rows]
     station_ids = [None] + [r[2] for r in rows]
@@ -61,9 +66,13 @@ def solve_sequences():
     node_to_idx = {node: i for i, node in enumerate(nodes_in_system)}
     idx_to_node = {i: node for node, i in node_to_idx.items()}
 
-    # 3. FETCH DISTANCE MATRIX
+    # 2. FETCH DISTANCE MATRIX
     node_ids_str = ",".join(map(str, nodes_in_system))
-    cur.execute(f"SELECT start_vid, end_vid, agg_cost FROM vector.distance_matrix WHERE start_vid IN ({node_ids_str}) AND end_vid IN ({node_ids_str})")
+    cur.execute(f"""
+        SELECT start_vid, end_vid, agg_cost 
+        FROM vector.distance_matrix 
+        WHERE start_vid IN ({node_ids_str}) AND end_vid IN ({node_ids_str})
+    """)
     
     dist_matrix = [[1000000] * size for _ in range(size)]
     for i in range(size): dist_matrix[i][i] = 0
@@ -71,20 +80,39 @@ def solve_sequences():
         if u in node_to_idx and v in node_to_idx:
             dist_matrix[node_to_idx[u]][node_to_idx[v]] = int(float(cost))
 
-    # 4. SOLVER CONFIGURATION
+    # 3. SOLVER CONFIGURATION
+    num_vehicles = 8
+    # Set a high HARD limit (500) to ensure the solver always finds a valid path
+    vehicle_capacities = [170] * num_vehicles 
+    
     manager = pywrapcp.RoutingIndexManager(size, num_vehicles, 0)
     routing = pywrapcp.RoutingModel(manager)
 
+    # Distance Callback
     def dist_cb(from_idx, to_idx):
         return dist_matrix[manager.IndexToNode(from_idx)][manager.IndexToNode(to_idx)]
     routing.SetArcCostEvaluatorOfAllVehicles(routing.RegisterTransitCallback(dist_cb))
 
+    # Demand Callback
     def demand_cb(from_idx):
         return node_demands[manager.IndexToNode(from_idx)]
-    routing.AddDimensionWithVehicleCapacity(routing.RegisterUnaryTransitCallback(demand_cb), 0, vehicle_capacities, True, 'Capacity')
+    
+    # 4. CAPACITY & SOFT PENALTY
+    routing.AddDimensionWithVehicleCapacity(
+        routing.RegisterUnaryTransitCallback(demand_cb), 
+        0, 
+        vehicle_capacities, 
+        True, 
+        'Capacity'
+    )
 
-    # FORCE USE OF ALL 8 VEHICLES via Fixed Costs
+    # Set Soft Upper Bound to force balance around 160kg
+    capacity_dimension = routing.GetDimensionOrDie('Capacity')
     for i in range(num_vehicles):
+        index = routing.End(i)
+        # Allows flex up to 500 but punishes the solver if it crosses 160
+        capacity_dimension.SetCumulVarSoftUpperBound(index, 160, 100000)
+        # Apply Fixed Cost to encourage using all trucks
         routing.SetFixedCostOfVehicle(10000, i)
 
     # 5. SOLVE
@@ -95,13 +123,18 @@ def solve_sequences():
 
     solution = routing.SolveWithParameters(search_params)
 
-    # 6. SAVE RESULTS (Clusters and Geometries)
+    # 6. SAVE RESULTS
+    # 6. SAVE RESULTS
     if solution:
-        # Prepare tables
+        # Prepare the geometries table
         cur.execute("CREATE TABLE IF NOT EXISTS vector.route_geometries (vehicle_id integer, geom geometry);")
-        cur.execute("DROP TABLE IF EXISTS vector.final_station_clusters;")
-        cur.execute("CREATE TABLE vector.final_station_clusters (station_id text, cluster_id int, weight int);")
         
+        # Prepare the station_node_map to store the results
+        # We add a 'vehicle_id' column if it doesn't exist
+        cur.execute("ALTER TABLE vector.station_node_map ADD COLUMN IF NOT EXISTS vehicle_id integer;")
+        # Clear old assignments
+        cur.execute("UPDATE vector.station_node_map SET vehicle_id = NULL;")
+
         print("\nProcessing and saving routes for all vehicles...")
         for v_id in range(num_vehicles):
             index = routing.Start(v_id)
@@ -112,16 +145,18 @@ def solve_sequences():
                 node_id = idx_to_node[node_idx]
                 route_nodes.append(node_id)
                 
-                # Save station assignments to cluster table
                 if node_id != depot_node:
-                    cur.execute("INSERT INTO vector.final_station_clusters VALUES (%s, %s, %s)", 
-                                (station_ids[node_idx], v_id + 1, node_demands[node_idx]))
+                    # UPDATE the original table that has the GEOM column
+                    cur.execute("""
+                        UPDATE vector.station_node_map 
+                        SET vehicle_id = %s 
+                        WHERE station_id = %s
+                    """, (v_id + 1, station_ids[node_idx]))
                 
                 index = solution.Value(routing.NextVar(index))
             
-            route_nodes.append(depot_node) # Complete the loop back to warehouse
+            route_nodes.append(depot_node)
             
-            # Save actual road geometry if vehicle has stops
             if len(route_nodes) > 2:
                 save_route_geometry(conn, v_id + 1, route_nodes)
                 print(f"Vehicle {v_id + 1}: Geometry and assignments saved.")
@@ -132,6 +167,8 @@ def solve_sequences():
         cur.close()
         conn.close()
         print("\nSuccess: Balanced weight and road routes saved to database.")
-
+    else:
+        print("\nError: Solver could not find a solution. Try increasing search time or adjusting constraints.")
+        
 if __name__ == "__main__":
     solve_sequences()
