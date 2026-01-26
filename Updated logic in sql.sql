@@ -1,5 +1,4 @@
-```
--- Updated Query - SQL
+-- restart from scratch
 -- 1. Reset the Mapping Table
 DROP TABLE IF EXISTS vector.station_node_map CASCADE;
 CREATE TABLE vector.station_node_map (
@@ -74,7 +73,7 @@ ORDER BY cluster_id;
 
 ------------------------
 -- Run all queries till here after this run the python script and then below query
-
+-- RUN THIS QUERY TO GET OPTIMIZED ROUTES WITH DISTANCE & WEIGHT CONSTRAINT
 SELECT 
     v.id AS vehicle_id,
     COUNT(DISTINCT f.station_id) AS parcel_count,
@@ -86,24 +85,82 @@ FROM (SELECT generate_series(1,8) AS id) v
 LEFT JOIN vector.final_station_clusters f ON v.id = f.cluster_id
 GROUP BY v.id
 ORDER BY v.id;
+-----------------------------
+-- SELECT vehicle_id, ST_AsText(geom) 
+-- FROM vector.route_geometries 
+-- WHERE vehicle_id IN (6, 7, 8);
+-----------------------------
 
-```
-### Run the script solve_clusters.py
-## see output in console
-![Console output](image-1.png)
+-- ADD TIME WINDOWS & SERVICE TIME CONSTRAINTS
+-- 1. Add time-related columns to your existing map
+ALTER TABLE vector.station_node_map 
+ADD COLUMN IF NOT EXISTS service_time INT DEFAULT 10,
+ADD COLUMN IF NOT EXISTS window_start INT DEFAULT 0,
+ADD COLUMN IF NOT EXISTS window_end INT DEFAULT 480;
 
-## run the last block of SQL query 
-![SQL output](image.png)
+-- 2. Populate with the random 5-20 min service times
+UPDATE vector.station_node_map 
+SET service_time = floor(random() * (20-5+1) + 5);
 
-## Updated logic - output 
-![SQL query output](image-2.png)
+-- 3. Set specific deadlines for testing (9:00 AM is 0 mins)
+-- ST01 must be delivered by 10:00 AM (60 mins)
+UPDATE vector.station_node_map SET window_end = 60 WHERE station_id = (SELECT station_id FROM vector.station_node_map LIMIT 1);
+-- ST02 must be delivered by 10:30 AM (90 mins)
+UPDATE vector.station_node_map SET window_end = 90 WHERE station_id = (SELECT station_id FROM vector.station_node_map OFFSET 1 LIMIT 1);
 
-## After Adding Time window constraints
-![VRP Time ZWindow](image-3.png)
+-----------------------------------
 
-# Run this query to get overview of vehicle id, time window, service time window
-```
-SELECT * FROM vector.station_node_map
-ORDER BY station_id ASC 
-```
-![alt text](image-4.png)
+SELECT 
+    station_id, 
+    window_end,
+    -- Calculate estimated travel time in minutes (Distance in meters / 500)
+    (ST_Distance(geom::geography, ST_SetSRID(ST_Point(72.8724, 19.0725), 4326)::geography) / 500) as est_travel_mins
+FROM vector.station_node_map
+WHERE (ST_Distance(geom::geography, ST_SetSRID(ST_Point(72.8724, 19.0725), 4326)::geography) / 500) > window_end;
+
+UPDATE vector.station_node_map 
+SET window_end = 90 
+WHERE station_id = '3616';
+
+SELECT station_id, vehicle_id, window_end 
+FROM vector.station_node_map 
+WHERE station_id = '3616';
+
+-- This query will tell the total Time of all vehicles to deliver & service time
+SELECT 
+    SUM(service_time) + SUM(ST_Distance(geom::geography, ST_SetSRID(ST_Point(72.8724, 19.0725), 4326)::geography) / 666) as total_required_mins
+FROM vector.station_node_map;
+----------------
+
+-- how many parcels each vehicle is carrying and their total weight
+SELECT 
+    vehicle_id, 
+    COUNT(*) as parcel_count, 
+    SUM(parcel_weight) as total_weight_kg
+FROM vector.station_node_map
+WHERE vehicle_id IS NOT NULL
+GROUP BY vehicle_id
+ORDER BY vehicle_id;
+
+---
+-- Check Arrival Times vs. Deadlines
+SELECT 
+    station_id, 
+    vehicle_id, 
+    parcel_weight,
+    service_time,
+    window_end as deadline_mins,
+    -- This calculates the 'Clock' version of your deadline for easier reading
+    to_char(interval '9 hours' + (window_end * interval '1 minute'), 'HH12:MI AM') as deadline_clock
+FROM vector.station_node_map
+ORDER BY vehicle_id, window_end;
+
+-------
+-- Find the "Impossible" Stations
+SELECT 
+    station_id, 
+    window_end,
+    -- Estimated travel in mins at your 40km/h speed
+    ROUND((ST_Distance(geom::geography, ST_SetSRID(ST_Point(72.8724, 19.0725), 4326)::geography) / 666)::numeric, 2) as min_travel_mins
+FROM vector.station_node_map
+WHERE (ST_Distance(geom::geography, ST_SetSRID(ST_Point(72.8724, 19.0725), 4326)::geography) / 666) > window_end;

@@ -3,7 +3,7 @@ import psycopg2
 from dotenv import load_dotenv
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
-
+import datetime
 load_dotenv()
 
 def get_db_connection():
@@ -43,7 +43,11 @@ def solve_sequences():
     warehouse_lon, warehouse_lat = 72.8724, 19.0725
 
     # Fetch station data
-    cur.execute("SELECT nearest_node_id, parcel_weight, station_id FROM vector.station_node_map")
+    cur.execute("""
+        SELECT nearest_node_id, parcel_weight, station_id, 
+               service_time, window_start, window_end 
+        FROM vector.station_node_map
+    """)
     rows = cur.fetchall()
     
     # Get Depot (Warehouse) node snapped to main network
@@ -61,6 +65,10 @@ def solve_sequences():
     nodes_in_system = [depot_node] + [r[0] for r in rows]
     node_demands = [0] + [r[1] for r in rows]
     station_ids = [None] + [r[2] for r in rows]
+    
+    # Time Data: Depot starts at 0 (9:00 AM) and can work 480 mins (8 hours)
+    node_service_times = [0] + [r[3] for r in rows]
+    node_windows = [(0, 480)] + [(r[4], r[5]) for r in rows]
     
     size = len(nodes_in_system)
     node_to_idx = {node: i for i, node in enumerate(nodes_in_system)}
@@ -87,7 +95,47 @@ def solve_sequences():
     
     manager = pywrapcp.RoutingIndexManager(size, num_vehicles, 0)
     routing = pywrapcp.RoutingModel(manager)
+    
+    # 4. CALLBACKS & DIMENSIONS
+    
+    # Time Callback: (Distance / 500m/min) + Service Time
+    def time_callback(from_idx, to_idx):
+        from_node = manager.IndexToNode(from_idx)
+        to_node = manager.IndexToNode(to_idx)
+        travel_time = dist_matrix[from_node][to_node] / 666 # Assume speed 40 km/h = 666 m/min
+        return int(travel_time + node_service_times[from_node])
 
+    time_callback_index = routing.RegisterTransitCallback(time_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(time_callback_index) # Minimize Time
+
+    # Time Dimension for Windows
+    routing.AddDimension(
+        time_callback_index,
+        60,   # allow waiting time (slack)
+        480,  # 8 hours maximum shift
+        False, 
+        'Time'
+    )
+    time_dimension = routing.GetDimensionOrDie('Time')
+
+    # Apply Windows to all nodes
+    for i, (start, end) in enumerate(node_windows):
+        if i == 0: continue
+        index = manager.NodeToIndex(i)
+        time_dimension.CumulVar(index).SetRange(start, end)
+
+    # 1. Clear any Hard Ranges that might be causing failures
+    for i in range(1, size):
+        index = manager.NodeToIndex(i)
+        # Set a very wide hard range (0 to 8 hours) so the solver doesn't crash
+        time_dimension.CumulVar(index).SetRange(0, 600)
+        
+        time_dimension.SetCumulVarSoftUpperBound(index, node_windows[i][1], 100000)
+    
+    # Penalty for dropping a parcel (1 million)
+    for i in range(1, size):
+        routing.AddDisjunction([manager.NodeToIndex(i)], 1000000)
+        
     # Distance Callback
     def dist_cb(from_idx, to_idx):
         return dist_matrix[manager.IndexToNode(from_idx)][manager.IndexToNode(to_idx)]
@@ -114,16 +162,25 @@ def solve_sequences():
         capacity_dimension.SetCumulVarSoftUpperBound(index, 160, 100000)
         # Apply Fixed Cost to encourage using all trucks
         routing.SetFixedCostOfVehicle(10000, i)
+        # Ensure start/end for each vehicle is within 8 hours
+        routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.Start(i)))
+        routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.End(i)))
 
     # 5. SOLVE
     search_params = pywrapcp.DefaultRoutingSearchParameters()
-    search_params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    search_params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION
     search_params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    search_params.time_limit.seconds = 60
+    search_params.time_limit.seconds = 120 # 2 minutes search time
 
     solution = routing.SolveWithParameters(search_params)
 
-    # 6. SAVE RESULTS
+    # Helper function for clock formatting
+    def min_to_clock(minutes):
+        start_time = datetime.time(9, 0)
+        full_date = datetime.datetime.combine(datetime.date.today(), start_time)
+        arrival_time = full_date + datetime.timedelta(minutes=minutes)
+        return arrival_time.strftime("%I:%M %p")
+    
     # 6. SAVE RESULTS
     if solution:
         # Prepare the geometries table
@@ -135,15 +192,28 @@ def solve_sequences():
         # Clear old assignments
         cur.execute("UPDATE vector.station_node_map SET vehicle_id = NULL;")
 
-        print("\nProcessing and saving routes for all vehicles...")
+        print("\n" + "="*50)
+        print("SUCCESS: SAVING ROUTES & CALCULATING ARRIVAL TIMES")
+        print("="*50)
+     
         for v_id in range(num_vehicles):
             index = routing.Start(v_id)
+            if routing.IsEnd(solution.Value(routing.NextVar(index))):
+                print(f"Vehicle {v_id + 1}: Unused")
+                continue
+
+            print(f"\n--- Vehicle {v_id + 1} Route ---")
             route_nodes = []
             
             while not routing.IsEnd(index):
                 node_idx = manager.IndexToNode(index)
                 node_id = idx_to_node[node_idx]
                 route_nodes.append(node_id)
+                
+                # Arrival Time Trace
+                arrival_min = solution.Min(time_dimension.CumulVar(index))
+                node_name = f"Station {station_ids[node_idx]}" if node_id != depot_node else "Warehouse"
+                print(f"{node_name.ljust(15)} | Arrives: {min_to_clock(arrival_min)}")
                 
                 if node_id != depot_node:
                     # UPDATE the original table that has the GEOM column
