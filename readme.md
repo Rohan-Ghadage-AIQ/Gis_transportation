@@ -107,3 +107,125 @@ SELECT * FROM vector.station_node_map
 ORDER BY station_id ASC 
 ```
 ![alt text](image-4.png)
+
+# Final Console Output 
+```
+
+PS C:\Users\91832\Desktop\AIQ\GisTransportation2> python solve_clusters.py
+
+==================================================
+SUCCESS: SAVING ROUTES & CALCULATING ARRIVAL TIMES
+==================================================
+
+--- Vehicle 1 Route ---
+Warehouse       | Arrives: 09:00 AM
+Station 3166    | Arrives: 09:03 AM
+Station 3105    | Arrives: 09:28 AM
+Station 11606   | Arrives: 09:51 AM
+Station 3455    | Arrives: 10:08 AM
+Station 3485    | Arrives: 10:25 AM
+Station 3449    | Arrives: 10:43 AM
+Station 3499    | Arrives: 10:53 AM
+Station 3169    | Arrives: 11:27 AM
+Vehicle 1: Geometry and assignments saved.
+
+--- Vehicle 2 Route ---
+Warehouse       | Arrives: 09:00 AM
+Station 3504    | Arrives: 09:42 AM
+Station 3510    | Arrives: 10:05 AM
+Station 3522    | Arrives: 10:27 AM
+Station 3520    | Arrives: 10:41 AM
+Station 3526    | Arrives: 11:03 AM
+Station 3534    | Arrives: 11:22 AM
+Station 3535    | Arrives: 11:33 AM
+Station 3546    | Arrives: 11:47 AM
+Vehicle 2: Geometry and assignments saved.
+
+--- Vehicle 3 Route ---
+Warehouse       | Arrives: 09:00 AM
+Station 3657    | Arrives: 10:12 AM
+Station 3597    | Arrives: 10:36 AM
+Station 3666    | Arrives: 10:58 AM
+Station 3661    | Arrives: 11:13 AM
+Station 3645    | Arrives: 11:44 AM
+Station 3617    | Arrives: 12:50 PM
+Station 11625   | Arrives: 02:00 PM
+Station 3490    | Arrives: 02:07 PM
+Vehicle 3: Geometry and assignments saved.
+
+--- Vehicle 4 Route ---
+Warehouse       | Arrives: 09:00 AM
+Station 3162    | Arrives: 09:10 AM
+Station 3150    | Arrives: 09:30 AM
+Station 3157    | Arrives: 09:56 AM
+Station 3156    | Arrives: 10:19 AM
+Station 3151    | Arrives: 10:32 AM
+Station 3163    | Arrives: 10:50 AM
+Vehicle 4: Geometry and assignments saved.
+
+--- Vehicle 5 Route ---
+Warehouse       | Arrives: 09:00 AM
+Station 11603   | Arrives: 09:36 AM
+Station 3629    | Arrives: 10:27 AM
+Station 12205   | Arrives: 11:57 AM
+Station 12201   | Arrives: 12:50 PM
+Station 12217   | Arrives: 01:16 PM
+Station 12204   | Arrives: 02:05 PM
+Station 12199   | Arrives: 02:40 PM
+Station 3052    | Arrives: 03:38 PM
+Vehicle 5: Geometry and assignments saved.
+
+--- Vehicle 6 Route ---
+Warehouse       | Arrives: 09:00 AM
+Station 3472    | Arrives: 09:39 AM
+Station 3476    | Arrives: 09:46 AM
+Station 3566    | Arrives: 10:42 AM
+Station 3562    | Arrives: 11:02 AM
+Station 3588    | Arrives: 11:24 AM
+Station 3580    | Arrives: 11:43 AM
+Station 3577    | Arrives: 12:08 PM
+Station 3558    | Arrives: 12:31 PM
+Vehicle 6: Geometry and assignments saved.
+
+--- Vehicle 7 Route ---
+Warehouse       | Arrives: 09:00 AM
+Station 3011    | Arrives: 09:08 AM
+Station 3013    | Arrives: 09:22 AM
+Station 2987    | Arrives: 09:38 AM
+Station 2978    | Arrives: 09:50 AM
+Station 2980    | Arrives: 10:11 AM
+Vehicle 7: Geometry and assignments saved.
+
+--- Vehicle 8 Route ---
+Warehouse       | Arrives: 09:00 AM
+Station 3025    | Arrives: 09:16 AM
+Station 3063    | Arrives: 09:33 AM
+Station 3046    | Arrives: 09:57 AM
+Station 2980    | Arrives: 10:11 AM
+Vehicle 7: Geometry and assignments saved.
+
+--- Vehicle 8 Route ---
+Warehouse       | Arrives: 09:00 AM
+Station 3025    | Arrives: 09:16 AM
+Station 3063    | Arrives: 09:33 AM
+Station 3046    | Arrives: 09:57 AM
+Station 3061    | Arrives: 10:03 AM
+Station 3067    | Arrives: 10:27 AM
+Station 3137    | Arrives: 10:46 AM
+Station 3135    | Arrives: 11:08 AM
+Station 3132    | Arrives: 11:22 AM
+Vehicle 8: Geometry and assignments saved.
+
+Success: Balanced weight and road routes saved to database.
+PS C:\Users\91832\Desktop\AIQ\GisTransportation2>
+
+
+Station 3061    | Arrives: 10:03 AM
+Station 3067    | Arrives: 10:27 AM
+Station 3137    | Arrives: 10:46 AM
+Station 3135    | Arrives: 11:08 AM
+Station 3132    | Arrives: 11:22 AM
+Vehicle 8: Geometry and assignments saved.
+
+Success: Balanced weight and road routes saved to database.
+```
