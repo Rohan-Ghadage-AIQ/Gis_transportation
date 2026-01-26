@@ -95,3 +95,6 @@ ORDER BY v.id;
 ## run the last block of SQL query 
 ![SQL output](image.png)
 
+## Updated logic - output 
+![SQL query output](image-2.png)
+
