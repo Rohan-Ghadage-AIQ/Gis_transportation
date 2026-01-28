@@ -225,6 +225,12 @@ def solve_sequences():
                 
                 index = solution.Value(routing.NextVar(index))
             
+            # Return to Depot
+            time_var = time_dimension.CumulVar(index)
+            return_min = solution.Min(time_var)
+            print(f"Warehouse (End) | Arrives: {min_to_clock(return_min)}")
+            print(f"Total Shift Duration: {return_min} minutes")
+            
             route_nodes.append(depot_node)
             
             if len(route_nodes) > 2:

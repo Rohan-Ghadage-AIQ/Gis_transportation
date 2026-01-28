@@ -111,8 +111,6 @@ ORDER BY station_id ASC
 # Final Console Output 
 ```
 
-PS C:\Users\91832\Desktop\AIQ\GisTransportation2> python solve_clusters.py
-
 ==================================================
 SUCCESS: SAVING ROUTES & CALCULATING ARRIVAL TIMES
 ==================================================
@@ -127,6 +125,8 @@ Station 3485    | Arrives: 10:25 AM
 Station 3449    | Arrives: 10:43 AM
 Station 3499    | Arrives: 10:53 AM
 Station 3169    | Arrives: 11:27 AM
+Warehouse (End) | Arrives: 11:46 AM
+Total Shift Duration: 166 minutes
 Vehicle 1: Geometry and assignments saved.
 
 --- Vehicle 2 Route ---
@@ -139,6 +139,8 @@ Station 3526    | Arrives: 11:03 AM
 Station 3534    | Arrives: 11:22 AM
 Station 3535    | Arrives: 11:33 AM
 Station 3546    | Arrives: 11:47 AM
+Warehouse (End) | Arrives: 12:57 PM
+Total Shift Duration: 237 minutes
 Vehicle 2: Geometry and assignments saved.
 
 --- Vehicle 3 Route ---
@@ -151,6 +153,8 @@ Station 3645    | Arrives: 11:44 AM
 Station 3617    | Arrives: 12:50 PM
 Station 11625   | Arrives: 02:00 PM
 Station 3490    | Arrives: 02:07 PM
+Warehouse (End) | Arrives: 03:04 PM
+Total Shift Duration: 364 minutes
 Vehicle 3: Geometry and assignments saved.
 
 --- Vehicle 4 Route ---
@@ -161,6 +165,8 @@ Station 3157    | Arrives: 09:56 AM
 Station 3156    | Arrives: 10:19 AM
 Station 3151    | Arrives: 10:32 AM
 Station 3163    | Arrives: 10:50 AM
+Warehouse (End) | Arrives: 11:13 AM
+Total Shift Duration: 133 minutes
 Vehicle 4: Geometry and assignments saved.
 
 --- Vehicle 5 Route ---
@@ -173,6 +179,8 @@ Station 12217   | Arrives: 01:16 PM
 Station 12204   | Arrives: 02:05 PM
 Station 12199   | Arrives: 02:40 PM
 Station 3052    | Arrives: 03:38 PM
+Warehouse (End) | Arrives: 04:22 PM
+Total Shift Duration: 442 minutes
 Vehicle 5: Geometry and assignments saved.
 
 --- Vehicle 6 Route ---
@@ -185,6 +193,8 @@ Station 3588    | Arrives: 11:24 AM
 Station 3580    | Arrives: 11:43 AM
 Station 3577    | Arrives: 12:08 PM
 Station 3558    | Arrives: 12:31 PM
+Warehouse (End) | Arrives: 01:39 PM
+Total Shift Duration: 279 minutes
 Vehicle 6: Geometry and assignments saved.
 
 --- Vehicle 7 Route ---
@@ -194,14 +204,8 @@ Station 3013    | Arrives: 09:22 AM
 Station 2987    | Arrives: 09:38 AM
 Station 2978    | Arrives: 09:50 AM
 Station 2980    | Arrives: 10:11 AM
-Vehicle 7: Geometry and assignments saved.
-
---- Vehicle 8 Route ---
-Warehouse       | Arrives: 09:00 AM
-Station 3025    | Arrives: 09:16 AM
-Station 3063    | Arrives: 09:33 AM
-Station 3046    | Arrives: 09:57 AM
-Station 2980    | Arrives: 10:11 AM
+Warehouse (End) | Arrives: 10:48 AM
+Total Shift Duration: 108 minutes
 Vehicle 7: Geometry and assignments saved.
 
 --- Vehicle 8 Route ---
@@ -214,17 +218,8 @@ Station 3067    | Arrives: 10:27 AM
 Station 3137    | Arrives: 10:46 AM
 Station 3135    | Arrives: 11:08 AM
 Station 3132    | Arrives: 11:22 AM
-Vehicle 8: Geometry and assignments saved.
-
-Success: Balanced weight and road routes saved to database.
-PS C:\Users\91832\Desktop\AIQ\GisTransportation2>
-
-
-Station 3061    | Arrives: 10:03 AM
-Station 3067    | Arrives: 10:27 AM
-Station 3137    | Arrives: 10:46 AM
-Station 3135    | Arrives: 11:08 AM
-Station 3132    | Arrives: 11:22 AM
+Warehouse (End) | Arrives: 11:38 AM
+Total Shift Duration: 158 minutes
 Vehicle 8: Geometry and assignments saved.
 
 Success: Balanced weight and road routes saved to database.
