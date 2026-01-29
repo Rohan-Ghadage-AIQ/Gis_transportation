@@ -118,9 +118,7 @@ SELECT
 FROM vector.station_node_map
 WHERE (ST_Distance(geom::geography, ST_SetSRID(ST_Point(72.8724, 19.0725), 4326)::geography) / 500) > window_end;
 
-UPDATE vector.station_node_map 
-SET window_end = 90 
-WHERE station_id = '3616';
+UPDATE vector.station_node_map SET window_end = 90 WHERE station_id = '3616';
 
 SELECT station_id, vehicle_id, window_end 
 FROM vector.station_node_map 
@@ -164,3 +162,27 @@ SELECT
     ROUND((ST_Distance(geom::geography, ST_SetSRID(ST_Point(72.8724, 19.0725), 4326)::geography) / 666)::numeric, 2) as min_travel_mins
 FROM vector.station_node_map
 WHERE (ST_Distance(geom::geography, ST_SetSRID(ST_Point(72.8724, 19.0725), 4326)::geography) / 666) > window_end;
+
+---------------
+-- Update the Window end to 12 Hours shift from 9 AM to 9 PM
+
+UPDATE vector.station_node_map SET window_end = 720 WHERE window_end = 480;
+----------------------------
+-- Reset windows to 7 AM - 9 PM (0 to 840 mins)
+-- Then assign random deadlines within your 3 shifts
+UPDATE vector.station_node_map 
+SET 
+    window_start = 0, 
+    window_end = CASE 
+        WHEN random() < 0.3 THEN floor(random() * (180-0+1) + 0)   -- Shift 1 (7-10 AM)
+        WHEN random() < 0.8 THEN floor(random() * (660-180+1) + 180) -- Shift 2 (10 AM-6 PM)
+        ELSE floor(random() * (840-660+1) + 660)                    -- Shift 3 (6-9 PM)
+    END;
+
+-- Explicitly set your test cases (Minutes from 7 AM) parcel with 3616 id will deliver at 11 AM.
+UPDATE vector.station_node_map SET window_end = 240 WHERE station_id = '3616'; -- 11:00 AM
+---------------
+
+UPDATE vector.station_node_map 
+SET window_end = 180 
+WHERE station_id IN ('3504', '3522', '3558');

@@ -98,40 +98,69 @@ def solve_sequences():
     
     # 4. CALLBACKS & DIMENSIONS
     
-    # Time Callback: (Distance / 500m/min) + Service Time
+    # Time Callback: (Distance / 666m/min) + Service Time
     def time_callback(from_idx, to_idx):
         from_node = manager.IndexToNode(from_idx)
         to_node = manager.IndexToNode(to_idx)
-        travel_time = dist_matrix[from_node][to_node] / 666 # Assume speed 40 km/h = 666 m/min
+        travel_time = dist_matrix[from_node][to_node] / 666 
         return int(travel_time + node_service_times[from_node])
 
     time_callback_index = routing.RegisterTransitCallback(time_callback)
-    routing.SetArcCostEvaluatorOfAllVehicles(time_callback_index) # Minimize Time
+    
+    # routing.SetArcCostEvaluatorOfAllVehicles(time_callback_index) # Minimize Time
 
     # Time Dimension for Windows
     routing.AddDimension(
         time_callback_index,
         60,   # allow waiting time (slack)
-        480,  # 8 hours maximum shift
+        720,  # 12 hours Total shift 9 AM TO 9 PM
         False, 
         'Time'
     )
     time_dimension = routing.GetDimensionOrDie('Time')
 
     # Apply Windows to all nodes
-    for i, (start, end) in enumerate(node_windows):
-        if i == 0: continue
-        index = manager.NodeToIndex(i)
-        time_dimension.CumulVar(index).SetRange(start, end)
 
     # 1. Clear any Hard Ranges that might be causing failures
     for i in range(1, size):
         index = manager.NodeToIndex(i)
-        # Set a very wide hard range (0 to 8 hours) so the solver doesn't crash
-        time_dimension.CumulVar(index).SetRange(0, 600)
-        
+        # Allow delivery anytime in the 14-hour window to prevent crashing
+        time_dimension.CumulVar(index).SetRange(0, 840)
+        # Soft target: still try to hit the database deadline (e.g., 11:00 AM = 240 mins)       
         time_dimension.SetCumulVarSoftUpperBound(index, node_windows[i][1], 100000)
     
+    # 2. Define Unique Vehicle Shifts (Minutes from 7:00 AM)
+    # Format: (Start_Min, End_Min)
+    vehicle_times = [
+        (120, 660), (120, 660), # V1, V2: 9 AM - 6 PM
+        (0, 480),               # V3: 7 AM - 3 PM
+        (0, 660),               # V4: 7 AM - 6 PM
+        (120, 600),             # V5: 9 AM - 5 PM
+        (60, 660),              # V6: 8 AM - 6 PM
+        (60, 840),              # V7: 8 AM - 9 PM
+        (0, 780)                # V8: 7 AM - 8 PM
+    ]
+    
+    for v in range(num_vehicles):
+        start_avail, end_avail = vehicle_times[v]
+        
+        # Start exactly at their specific clock-in time
+        start_index = routing.Start(v)
+        time_dimension.CumulVar(start_index).SetRange(start_avail, start_avail)
+        
+        # End at or after shift end, but before 9 PM
+        end_index = routing.End(v)
+        time_dimension.CumulVar(end_index).SetRange(start_avail, 840)
+        
+        # Soft Upper Bound forces them to try to return by their shift end
+        time_dimension.SetCumulVarSoftUpperBound(end_index, end_avail, 50000)
+
+        # Optimization: Prioritize starting on time and finishing early
+        routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(start_index))
+        routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
+        
+        routing.SetFixedCostOfVehicle(10000, v)
+        
     # Penalty for dropping a parcel (1 million)
     for i in range(1, size):
         routing.AddDisjunction([manager.NodeToIndex(i)], 1000000)
@@ -176,10 +205,21 @@ def solve_sequences():
 
     # Helper function for clock formatting
     def min_to_clock(minutes):
-        start_time = datetime.time(9, 0)
-        full_date = datetime.datetime.combine(datetime.date.today(), start_time)
-        arrival_time = full_date + datetime.timedelta(minutes=minutes)
-        return arrival_time.strftime("%I:%M %p")
+        """
+        Converts minutes elapsed since 7:00 AM into a readable 12-hour clock string.
+        Aligned with the new heterogeneous fleet and 3-shift delivery logic.
+        """
+        # 1. Define the base start time (7:00 AM)
+        base_time = datetime.datetime.combine(datetime.date.today(), datetime.time(7, 0))
+        
+        # 2. Add the elapsed minutes from the solver
+        target_time = base_time + datetime.timedelta(minutes=float(minutes))
+        
+        # 3. Format with a check for midnight rollovers
+        if target_time.date() > base_time.date():
+            return target_time.strftime("%I:%M %p (+1 Day)")
+            
+        return target_time.strftime("%I:%M %p")
     
     # 6. SAVE RESULTS
     if solution:
@@ -205,6 +245,10 @@ def solve_sequences():
             print(f"\n--- Vehicle {v_id + 1} Route ---")
             route_nodes = []
             
+            # 1. IMPROVEMENT: Show the actual Clock-in time for this specific vehicle
+            start_min = solution.Min(time_dimension.CumulVar(index))
+            print(f"Warehouse (Start) | Clock-in: {min_to_clock(start_min)}")
+            
             while not routing.IsEnd(index):
                 node_idx = manager.IndexToNode(index)
                 node_id = idx_to_node[node_idx]
@@ -212,11 +256,14 @@ def solve_sequences():
                 
                 # Arrival Time Trace
                 arrival_min = solution.Min(time_dimension.CumulVar(index))
+                
+                # 2. IMPROVEMENT: Add a [LATE] tag if arrival exceeds the database deadline
+                is_late = " [LATE]" if node_id != depot_node and arrival_min > node_windows[node_idx][1] else ""
+                
                 node_name = f"Station {station_ids[node_idx]}" if node_id != depot_node else "Warehouse"
-                print(f"{node_name.ljust(15)} | Arrives: {min_to_clock(arrival_min)}")
+                print(f"{node_name.ljust(15)} | Arrives: {min_to_clock(arrival_min)}{is_late}")
                 
                 if node_id != depot_node:
-                    # UPDATE the original table that has the GEOM column
                     cur.execute("""
                         UPDATE vector.station_node_map 
                         SET vehicle_id = %s 
@@ -229,7 +276,15 @@ def solve_sequences():
             time_var = time_dimension.CumulVar(index)
             return_min = solution.Min(time_var)
             print(f"Warehouse (End) | Arrives: {min_to_clock(return_min)}")
-            print(f"Total Shift Duration: {return_min} minutes")
+            
+            actual_work_time = return_min - start_min
+            
+            # 3. IMPROVEMENT: Check if the vehicle exceeded its specific shift end
+            _, end_avail = vehicle_times[v_id]
+            overtime = max(0, return_min - end_avail)
+            overtime_str = f" (Overtime: {overtime} mins)" if overtime > 0 else " [ON TIME]"
+            
+            print(f"Total Work Duration: {actual_work_time} minutes{overtime_str}")
             
             route_nodes.append(depot_node)
             
@@ -238,7 +293,7 @@ def solve_sequences():
                 print(f"Vehicle {v_id + 1}: Geometry and assignments saved.")
             else:
                 print(f"Vehicle {v_id + 1}: No stops assigned.")
-
+            
         conn.commit()
         cur.close()
         conn.close()
