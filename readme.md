@@ -110,128 +110,128 @@ ORDER BY station_id ASC
 
 # Final Console Output 
 ```
+
 PS C:\Users\91832\Desktop\AIQ\GisTransportation2> python solve_clusters.py
- 
+
 ==================================================
 SUCCESS: SAVING ROUTES & CALCULATING ARRIVAL TIMES
 ==================================================
- 
+
 --- Vehicle 1 Route ---
 Warehouse (Start) | Clock-in: 09:00 AM
-Warehouse       | Arrives: 09:00 AM
-Station 3166    | Arrives: 09:03 AM
-Station 3661    | Arrives: 10:33 AM
-Station 3666    | Arrives: 10:47 AM
-Station 3597    | Arrives: 11:04 AM
-Station 3657    | Arrives: 11:28 AM
-Station 3566    | Arrives: 11:54 AM
-Station 3562    | Arrives: 12:14 PM
-Station 3588    | Arrives: 12:36 PM
-Warehouse (End) | Arrives: 01:53 PM
-Total Work Duration: 293 minutes [ON TIME]
+Warehouse       | Arrives: 09:00 AM [IDEAL]
+Station 3490    | Arrives: 09:39 AM [IDEAL]
+Station 11625   | Arrives: 09:58 AM [IN BUFFER]
+Station 3645    | Arrives: 10:38 AM [IDEAL]
+Station 3597    | Arrives: 11:23 AM [IN BUFFER]
+Station 3666    | Arrives: 11:45 AM [IN BUFFER]
+Station 3661    | Arrives: 12:00 PM [IDEAL]
+Station 3657    | Arrives: 12:18 PM [IDEAL]
+Station 3566    | Arrives: 12:44 PM [IDEAL]
+Warehouse (End) | Arrives: 02:09 PM
+Total Work Duration: 309 minutes [ON TIME]
 Vehicle 1: Geometry and assignments saved.
- 
+
 --- Vehicle 2 Route ---
 Warehouse (Start) | Clock-in: 09:00 AM
-Warehouse       | Arrives: 09:00 AM
-Station 3025    | Arrives: 09:16 AM
-Station 3067    | Arrives: 09:29 AM
-Station 3061    | Arrives: 09:40 AM
-Station 3046    | Arrives: 10:00 AM
-Station 3063    | Arrives: 10:09 AM
-Station 3135    | Arrives: 10:43 AM
-Station 3132    | Arrives: 10:57 AM
+Warehouse       | Arrives: 09:00 AM [IDEAL]
+Station 3166    | Arrives: 09:03 AM [IDEAL]
+Station 3105    | Arrives: 09:28 AM [IDEAL]
+Station 3163    | Arrives: 09:52 AM [IN BUFFER]
+Station 3151    | Arrives: 10:10 AM [IDEAL]
+Station 3156    | Arrives: 10:30 AM [IDEAL]
+Station 3157    | Arrives: 10:46 AM [IDEAL]
 Warehouse (End) | Arrives: 11:13 AM
 Total Work Duration: 133 minutes [ON TIME]
 Vehicle 2: Geometry and assignments saved.
- 
+
 --- Vehicle 3 Route ---
 Warehouse (Start) | Clock-in: 07:00 AM
-Warehouse       | Arrives: 07:00 AM
-Station 3504    | Arrives: 07:42 AM
-Station 3510    | Arrives: 08:05 AM
-Station 3535    | Arrives: 08:32 AM
-Station 3546    | Arrives: 08:46 AM
-Station 3534    | Arrives: 09:09 AM
-Station 3526    | Arrives: 09:16 AM
-Station 3520    | Arrives: 09:35 AM
-Station 3522    | Arrives: 09:58 AM
-Warehouse (End) | Arrives: 11:00 AM
-Total Work Duration: 240 minutes [ON TIME]
+Warehouse       | Arrives: 07:00 AM [IDEAL]
+Station 3169    | Arrives: 07:07 AM [IDEAL]
+Station 11603   | Arrives: 07:50 AM [IN BUFFER]
+Station 3455    | Arrives: 08:18 AM [IDEAL]
+Station 3472    | Arrives: 08:41 AM [IDEAL]
+Station 3476    | Arrives: 08:48 AM [IN BUFFER]
+Station 3485    | Arrives: 09:23 AM [IDEAL]
+Station 3499    | Arrives: 09:40 AM [IDEAL]
+Station 3449    | Arrives: 09:51 AM [IDEAL]
+Warehouse (End) | Arrives: 10:30 AM
+Total Work Duration: 210 minutes [ON TIME]
 Vehicle 3: Geometry and assignments saved.
- 
+
 --- Vehicle 4 Route ---
 Warehouse (Start) | Clock-in: 07:00 AM
-Warehouse       | Arrives: 07:00 AM
-Station 11603   | Arrives: 07:36 AM
-Station 3558    | Arrives: 08:23 AM
-Station 3577    | Arrives: 08:38 AM
-Station 3580    | Arrives: 09:02 AM
-Station 3645    | Arrives: 09:33 AM
-Station 3617    | Arrives: 10:39 AM
-Station 3616    | Arrives: 10:58 AM
-Station 3499    | Arrives: 12:21 PM
-Warehouse (End) | Arrives: 01:00 PM
-Total Work Duration: 360 minutes [ON TIME]
+Warehouse       | Arrives: 07:00 AM [IDEAL]
+Station 3535    | Arrives: 07:53 AM [IDEAL]
+Station 3546    | Arrives: 08:07 AM [IDEAL]
+Station 3534    | Arrives: 08:30 AM [IDEAL]
+Station 3526    | Arrives: 08:37 AM [IDEAL]
+Station 3520    | Arrives: 08:56 AM [IDEAL]
+Station 3522    | Arrives: 09:19 AM [IN BUFFER]
+Station 3510    | Arrives: 09:38 AM [IN BUFFER]
+Station 3504    | Arrives: 10:00 AM [IN BUFFER]
+Warehouse (End) | Arrives: 10:57 AM
+Total Work Duration: 237 minutes [ON TIME]
 Vehicle 4: Geometry and assignments saved.
- 
+
 --- Vehicle 5 Route ---
 Warehouse (Start) | Clock-in: 09:00 AM
-Warehouse       | Arrives: 09:00 AM
-Station 3163    | Arrives: 09:07 AM
-Station 3151    | Arrives: 09:25 AM
-Station 3162    | Arrives: 09:45 AM
-Station 3150    | Arrives: 10:05 AM
-Station 3157    | Arrives: 10:31 AM
-Station 3156    | Arrives: 10:54 AM
-Warehouse (End) | Arrives: 11:15 AM
-Total Work Duration: 135 minutes [ON TIME]
+Warehouse       | Arrives: 09:00 AM [IDEAL]
+Station 3025    | Arrives: 09:16 AM [IN BUFFER]
+Station 3067    | Arrives: 09:29 AM [IDEAL]
+Station 3061    | Arrives: 09:40 AM [IDEAL]
+Station 3046    | Arrives: 10:00 AM [IDEAL]
+Station 3063    | Arrives: 10:09 AM [IDEAL]
+Station 3135    | Arrives: 10:43 AM [IDEAL]
+Station 3132    | Arrives: 10:57 AM [IDEAL]
+Station 3011    | Arrives: 11:15 AM [IN BUFFER]
+Warehouse (End) | Arrives: 11:31 AM
+Total Work Duration: 151 minutes [ON TIME]
 Vehicle 5: Geometry and assignments saved.
- 
+
 --- Vehicle 6 Route ---
 Warehouse (Start) | Clock-in: 08:00 AM
-Warehouse       | Arrives: 08:00 AM
-Station 11606   | Arrives: 08:30 AM
-Station 3629    | Arrives: 09:16 AM
-Station 12204   | Arrives: 10:37 AM
-Station 12205   | Arrives: 10:57 AM
-Station 12217   | Arrives: 11:51 AM
-Station 12201   | Arrives: 12:07 PM
-Station 12199   | Arrives: 01:29 PM
-Station 3052    | Arrives: 02:27 PM
+Warehouse       | Arrives: 08:00 AM [IDEAL]
+Station 11606   | Arrives: 08:30 AM [IN BUFFER]
+Station 3629    | Arrives: 09:16 AM [IN BUFFER]
+Station 12204   | Arrives: 10:37 AM [IN BUFFER]
+Station 12205   | Arrives: 10:57 AM [IN BUFFER]
+Station 12217   | Arrives: 11:51 AM [IDEAL]
+Station 12201   | Arrives: 12:07 PM [IDEAL]
+Station 12199   | Arrives: 01:29 PM [IDEAL]
+Station 3052    | Arrives: 02:27 PM [IN BUFFER]
 Warehouse (End) | Arrives: 03:11 PM
 Total Work Duration: 431 minutes [ON TIME]
 Vehicle 6: Geometry and assignments saved.
- 
+
 --- Vehicle 7 Route ---
 Warehouse (Start) | Clock-in: 08:00 AM
-Warehouse       | Arrives: 08:00 AM
-Station 3472    | Arrives: 08:39 AM
-Station 3476    | Arrives: 08:46 AM
-Station 3449    | Arrives: 09:19 AM
-Station 3485    | Arrives: 09:33 AM
-Station 3455    | Arrives: 09:54 AM
-Station 11625   | Arrives: 10:11 AM
-Station 3490    | Arrives: 10:18 AM
-Station 3105    | Arrives: 11:00 AM
-Warehouse (End) | Arrives: 11:28 AM
-Total Work Duration: 208 minutes [ON TIME]
+Warehouse       | Arrives: 08:00 AM [IDEAL]
+Station 2987    | Arrives: 08:20 AM [IN BUFFER]
+Station 2980    | Arrives: 08:36 AM [IDEAL]
+Station 2978    | Arrives: 08:54 AM [IDEAL]
+Station 3013    | Arrives: 09:20 AM [IDEAL]
+Station 3162    | Arrives: 09:37 AM [IN BUFFER]
+Station 3150    | Arrives: 09:57 AM [IDEAL]
+Warehouse (End) | Arrives: 10:28 AM
+Total Work Duration: 148 minutes [ON TIME]
 Vehicle 7: Geometry and assignments saved.
- 
+
 --- Vehicle 8 Route ---
 Warehouse (Start) | Clock-in: 07:00 AM
-Warehouse       | Arrives: 07:00 AM
-Station 3137    | Arrives: 07:14 AM
-Station 3169    | Arrives: 07:44 AM
-Station 2987    | Arrives: 08:21 AM
-Station 2980    | Arrives: 08:37 AM
-Station 2978    | Arrives: 08:55 AM
-Station 3013    | Arrives: 09:21 AM
-Station 3011    | Arrives: 09:33 AM
-Warehouse (End) | Arrives: 09:49 AM
-Total Work Duration: 169 minutes [ON TIME]
+Warehouse       | Arrives: 07:00 AM [IDEAL]
+Station 3137    | Arrives: 07:14 AM [IN BUFFER]
+Station 3558    | Arrives: 08:34 AM [IDEAL]
+Station 3577    | Arrives: 08:49 AM [IN BUFFER]
+Station 3580    | Arrives: 09:13 AM [IN BUFFER]
+Station 3588    | Arrives: 09:36 AM [IDEAL]
+Station 3562    | Arrives: 09:52 AM [IDEAL]
+Station 3616    | Arrives: 11:00 AM [IN BUFFER]
+Station 3617    | Arrives: 11:23 AM [IDEAL]
+Warehouse (End) | Arrives: 01:07 PM
+Total Work Duration: 367 minutes [ON TIME]
 Vehicle 8: Geometry and assignments saved.
- 
+
 Success: Balanced weight and road routes saved to database.
-PS C:\Users\91832\Desktop\AIQ\GisTransportation2>
 ```

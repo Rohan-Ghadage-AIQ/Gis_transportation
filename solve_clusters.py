@@ -122,13 +122,24 @@ def solve_sequences():
     # Apply Windows to all nodes
 
     # 1. Clear any Hard Ranges that might be causing failures
+    # Apply Tiered Windows to all nodes
     for i in range(1, size):
         index = manager.NodeToIndex(i)
-        # Allow delivery anytime in the 14-hour window to prevent crashing
+        deadline = node_windows[i][1]
+        
+        # 1. Physical Hard Limit (End of the day)
         time_dimension.CumulVar(index).SetRange(0, 840)
-        # Soft target: still try to hit the database deadline (e.g., 11:00 AM = 240 mins)       
-        time_dimension.SetCumulVarSoftUpperBound(index, node_windows[i][1], 100000)
-    
+        
+        # 2. THE BUFFER LOGIC
+        # We want to deliver 60 mins before the deadline if possible.
+        preferred_time = max(0, deadline - 60) 
+        # Small penalty (1,000) for every minute between 10 AM and 11 AM
+        time_dimension.SetCumulVarSoftUpperBound(index, preferred_time, 5000)
+        
+        # 3. THE DEADLINE LOGIC
+        # Massive penalty (100,000) for every minute after 11 AM
+        time_dimension.SetCumulVarSoftUpperBound(index, deadline, 1000000)
+        
     # 2. Define Unique Vehicle Shifts (Minutes from 7:00 AM)
     # Format: (Start_Min, End_Min)
     vehicle_times = [
@@ -254,14 +265,23 @@ def solve_sequences():
                 node_id = idx_to_node[node_idx]
                 route_nodes.append(node_id)
                 
+                # Define the deadline for THIS specific station ---
+                deadline = node_windows[node_idx][1] #
+                
                 # Arrival Time Trace
                 arrival_min = solution.Min(time_dimension.CumulVar(index))
-                
-                # 2. IMPROVEMENT: Add a [LATE] tag if arrival exceeds the database deadline
-                is_late = " [LATE]" if node_id != depot_node and arrival_min > node_windows[node_idx][1] else ""
-                
+                status = ""
+                # Buffer Logic: Ideal is >60 mins early
+                if arrival_min <= (deadline - 60):
+                    status = " [IDEAL]"
+                # Buffer Logic: 0-60 mins before deadline
+                elif arrival_min <= deadline:
+                    status = " [IN BUFFER]"
+                else:
+                    status = " [LATE]"
+                    
                 node_name = f"Station {station_ids[node_idx]}" if node_id != depot_node else "Warehouse"
-                print(f"{node_name.ljust(15)} | Arrives: {min_to_clock(arrival_min)}{is_late}")
+                print(f"{node_name.ljust(15)} | Arrives: {min_to_clock(arrival_min)}{status}")
                 
                 if node_id != depot_node:
                     cur.execute("""
