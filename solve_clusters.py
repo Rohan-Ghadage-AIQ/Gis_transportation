@@ -91,7 +91,12 @@ def solve_sequences():
     # 3. SOLVER CONFIGURATION
     num_vehicles = 8
     # Set a high HARD limit (500) to ensure the solver always finds a valid path
-    vehicle_capacities = [170] * num_vehicles 
+    vehicle_capacities = [
+    175, 261,  # Vehicle 1, 2
+    348, 156,  # Vehicle 3, 4
+    178, 142,  # Vehicle 5, 6
+    118, 125   # Vehicle 7, 8
+]
     
     manager = pywrapcp.RoutingIndexManager(size, num_vehicles, 0)
     routing = pywrapcp.RoutingModel(manager)
@@ -297,6 +302,13 @@ def solve_sequences():
             return_min = solution.Min(time_var)
             print(f"Warehouse (End) | Arrives: {min_to_clock(return_min)}")
             
+            # Vehicle capacity print
+            total_weight = solution.Min(capacity_dimension.CumulVar(index))
+            max_cap = vehicle_capacities[v_id]
+            utilization = (total_weight / max_cap) * 100
+            print(f"Weight Carried: {total_weight}kg / {max_cap}kg ({utilization:.1f}% Utilized)")
+            
+            # ----------------------------------
             actual_work_time = return_min - start_min
             
             # 3. IMPROVEMENT: Check if the vehicle exceeded its specific shift end
