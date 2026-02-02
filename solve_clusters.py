@@ -177,9 +177,9 @@ def solve_sequences():
         
         routing.SetFixedCostOfVehicle(10000, v)
         
-    # Penalty for dropping a parcel (1 million)
+    # Penalty for dropping a parcel (1 million) to 6 million
     for i in range(1, size):
-        routing.AddDisjunction([manager.NodeToIndex(i)], 1000000)
+        routing.AddDisjunction([manager.NodeToIndex(i)], 10000000)
         
     # Distance Callback
     def dist_cb(from_idx, to_idx):
@@ -204,7 +204,7 @@ def solve_sequences():
     for i in range(num_vehicles):
         index = routing.End(i)
         # Allows flex up to 500 but punishes the solver if it crosses 160
-        capacity_dimension.SetCumulVarSoftUpperBound(index, 160, 100000)
+        capacity_dimension.SetCumulVarSoftUpperBound(index, 250, 1000)
         # Apply Fixed Cost to encourage using all trucks
         routing.SetFixedCostOfVehicle(10000, i)
         # Ensure start/end for each vehicle is within 8 hours
@@ -215,7 +215,7 @@ def solve_sequences():
     search_params = pywrapcp.DefaultRoutingSearchParameters()
     search_params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION
     search_params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    search_params.time_limit.seconds = 120 # 2 minutes search time
+    search_params.time_limit.seconds = 180 # 2 minutes search time to 3 minutes
 
     solution = routing.SolveWithParameters(search_params)
 

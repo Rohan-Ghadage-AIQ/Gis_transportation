@@ -1,5 +1,6 @@
 -- restart from scratch
 -- 1. Reset the Mapping Table
+-- 1 --
 DROP TABLE IF EXISTS vector.station_node_map CASCADE;
 CREATE TABLE vector.station_node_map (
     station_id TEXT PRIMARY KEY,
@@ -10,6 +11,7 @@ CREATE TABLE vector.station_node_map (
 
 -- 2. Populate from your current sample table (e.g., sample_1_data)
 -- This logic snaps your 60 points to the main road network (Component 11)
+-- 2 --
 INSERT INTO vector.station_node_map (station_id, nearest_node_id, geom)
 SELECT 
     id,
@@ -19,14 +21,16 @@ SELECT
      WHERE m.component = 11 
      ORDER BY r.geom <-> s.geom LIMIT 1),
     geom
-FROM vector.sample_1_data s; -- Change this table name for switching data
+FROM vector.sample_2_data s; -- Change this table name for switching data
 
 -----------------------------------------------------
 
 -- 1. Clear the old matrix
+-- 3 --
 TRUNCATE TABLE vector.distance_matrix;
 -- Insert data into distance matrix
 -- 2. Calculate costs between all nodes currently in the map (60 + Warehouse)
+-- 4 --
 INSERT INTO vector.distance_matrix (start_vid, end_vid, agg_cost)
 SELECT start_vid, end_vid, agg_cost
 FROM pgr_dijkstraCost(
@@ -42,6 +46,7 @@ FROM pgr_dijkstraCost(
     directed := false
 );
 ------------------------------------------
+-- 5 --
 SELECT * FROM vector.distance_matrix;
 ----------------
 SELECT * FROM vector.final_station_clusters;
@@ -49,6 +54,7 @@ SELECT * FROM vector.final_station_clusters;
 SELECT * FROM vector.route_geometries;
 ----------------
 -- This query checks how many distance pairs exist for the stations currently in your map
+-- 6 --
 SELECT 
     (SELECT COUNT(*) FROM vector.station_node_map) as stations_in_map,
     COUNT(dm.*) as matching_distances_found
@@ -93,12 +99,14 @@ ORDER BY v.id;
 
 -- ADD TIME WINDOWS & SERVICE TIME CONSTRAINTS
 -- 1. Add time-related columns to your existing map
+-- 7 --
 ALTER TABLE vector.station_node_map 
 ADD COLUMN IF NOT EXISTS service_time INT DEFAULT 10,
 ADD COLUMN IF NOT EXISTS window_start INT DEFAULT 0,
 ADD COLUMN IF NOT EXISTS window_end INT DEFAULT 480;
 
 -- 2. Populate with the random 5-20 min service times
+-- 8 --
 UPDATE vector.station_node_map 
 SET service_time = floor(random() * (20-5+1) + 5);
 
@@ -165,11 +173,13 @@ WHERE (ST_Distance(geom::geography, ST_SetSRID(ST_Point(72.8724, 19.0725), 4326)
 
 ---------------
 -- Update the Window end to 12 Hours shift from 9 AM to 9 PM
+-- 9 --
 
 UPDATE vector.station_node_map SET window_end = 720 WHERE window_end = 480;
 ----------------------------
 -- Reset windows to 7 AM - 9 PM (0 to 840 mins)
 -- Then assign random deadlines within your 3 shifts
+-- 10 --
 UPDATE vector.station_node_map 
 SET 
     window_start = 0, 
@@ -189,6 +199,7 @@ WHERE station_id IN ('3504', '3522', '3558');
 ------------------------
 
 -- Update parcel weights to be a random integer between 10 and 30
+-- 11 --
 UPDATE vector.station_node_map 
 SET parcel_weight = floor(random() * (30 - 10 + 1) + 10);
 ----------
@@ -196,3 +207,7 @@ SET parcel_weight = floor(random() * (30 - 10 + 1) + 10);
 -- sum of the parcels_weight in the data
 select sum(parcel_weight) from vector.station_node_map
 ------------
+-- Relax the Impossible Windows
+UPDATE vector.station_node_map 
+SET window_end = 300
+WHERE station_id IN ('3031', '3676', '11630', '3593', '3598');
