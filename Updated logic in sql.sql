@@ -182,7 +182,17 @@ SET
 -- Explicitly set your test cases (Minutes from 7 AM) parcel with 3616 id will deliver at 11 AM.
 UPDATE vector.station_node_map SET window_end = 240 WHERE station_id = '3616'; -- 11:00 AM
 ---------------
-
+-- setting the window end timing for different vehicles 
 UPDATE vector.station_node_map 
 SET window_end = 180 
 WHERE station_id IN ('3504', '3522', '3558');
+------------------------
+
+-- Update parcel weights to be a random integer between 10 and 30
+UPDATE vector.station_node_map 
+SET parcel_weight = floor(random() * (30 - 10 + 1) + 10);
+----------
+
+-- sum of the parcels_weight in the data
+select sum(parcel_weight) from vector.station_node_map
+------------
