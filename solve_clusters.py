@@ -97,6 +97,8 @@ def solve_sequences():
     178, 142,  # Vehicle 5, 6
     118, 125   # Vehicle 7, 8
 ]
+    # Define the cost per km for each vehicle index
+    vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10]
     
     manager = pywrapcp.RoutingIndexManager(size, num_vehicles, 0)
     routing = pywrapcp.RoutingModel(manager)
@@ -182,9 +184,29 @@ def solve_sequences():
         routing.AddDisjunction([manager.NodeToIndex(i)], 10000000)
         
     # Distance Callback
-    def dist_cb(from_idx, to_idx):
-        return dist_matrix[manager.IndexToNode(from_idx)][manager.IndexToNode(to_idx)]
-    routing.SetArcCostEvaluatorOfAllVehicles(routing.RegisterTransitCallback(dist_cb))
+    # def dist_cb(from_idx, to_idx):
+    #     return dist_matrix[manager.IndexToNode(from_idx)][manager.IndexToNode(to_idx)]
+    # routing.SetArcCostEvaluatorOfAllVehicles(routing.RegisterTransitCallback(dist_cb))
+    
+    # Customized Distance Callback with Vehicle Costs
+    # Distance Matrix based Cost Callback logic
+    def create_cost_callback(v_idx):
+        def cost_callback(from_idx, to_idx):
+            from_node = manager.IndexToNode(from_idx)
+            to_node = manager.IndexToNode(to_idx)
+            distance_meters = dist_matrix[from_node][to_node]
+            
+            # Multiply by 1000 to avoid losing precision during integer conversion
+            # This keeps the cost significant even for short distances.
+            cost_per_meter = (vehicle_costs_per_km[v_idx] / 1000.0)
+            return int(distance_meters * cost_per_meter * 100) # Scaling factor of 100
+        return cost_callback
+
+    # Register a unique cost evaluator for each vehicle
+    for v_id in range(num_vehicles):
+        cost_cb = create_cost_callback(v_id)
+        cost_cb_index = routing.RegisterTransitCallback(cost_cb)
+        routing.SetArcCostEvaluatorOfVehicle(cost_cb_index, v_id)
 
     # Demand Callback
     def demand_cb(from_idx):
@@ -307,6 +329,20 @@ def solve_sequences():
             max_cap = vehicle_capacities[v_id]
             utilization = (total_weight / max_cap) * 100
             print(f"Weight Carried: {total_weight}kg / {max_cap}kg ({utilization:.1f}% Utilized)")
+            
+            # Calculate Total Route Cost
+            # solution.Value(routing.CostVar()) gives the total objective, 
+            # but we want to see it per vehicle for the report.
+            route_distance = 0
+            prev_index = routing.Start(v_id)
+            while not routing.IsEnd(prev_index):
+                curr_index = solution.Value(routing.NextVar(prev_index))
+                route_distance += dist_matrix[manager.IndexToNode(prev_index)][manager.IndexToNode(curr_index)]
+                prev_index = curr_index
+
+            # Inside your vehicle print loop:
+            total_op_cost = (route_distance / 1000.0) * vehicle_costs_per_km[v_id]
+            print(f"Distance: {route_distance/1000.0:.2f}km | Operational Cost: ₹{total_op_cost:.2f}")
             
             # ----------------------------------
             actual_work_time = return_min - start_min
