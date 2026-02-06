@@ -1,1 +1,229 @@
+# ============================================
+# GisTransportation4 - Git Ignore File
+# ============================================
+# This file specifies which files and folders should NOT be tracked by Git
+# Organized by category for easy maintenance
+
+# ============================================
+# Environment Variables (CRITICAL - Contains Secrets!)
+# ============================================
 .env
+.env.local
+.env.production
+.env.development
+*.env
+
+# ============================================
+# Python Backend
+# ============================================
+# Virtual Environment
+venv/
+env/
+ENV/
+backend/venv/
+backend/env/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / Packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# ============================================
+# Node.js / Frontend
+# ============================================
+# Dependencies
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build Output
+dist/
+dist-ssr/
+frontend/dist/
+frontend/dist-ssr/
+
+# Vite
+.vite/
+frontend/.vite/
+
+# ============================================
+# IDEs and Editors
+# ============================================
+# VSCode
+.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (PyCharm, WebStorm, IntelliJ)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================
+# Operating System Files
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================
+# Logs and Temporary Files
+# ============================================
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# ============================================
+# Database Files (if storing locally)
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ============================================
+# Data Files (Optional - Uncomment if needed)
+# ============================================
+# Uncomment these if you don't want to track data files
+# *.csv
+# *.xlsx
+# *.xls
+# data/
+# uploads/
+
+# ============================================
+# Test and Sample Files (Keep for reference)
+# ============================================
+# We KEEP these files for testing:
+# - test_data.csv
+# - station_data_input.csv
+# - converted_stations.csv
+# If you want to exclude them, uncomment below:
+# test_data.csv
+# station_data_input.csv
+# converted_stations.csv
+
+# ============================================
+# Documentation Build Files
+# ============================================
+docs/_build/
+site/
+
+# ============================================
+# Miscellaneous
+# ============================================
+# Backup files
+*.backup
+*.old
+
+# Compressed files
+*.zip
+*.tar.gz
+*.rar
+
+# SSL certificates (if any)
+*.pem
+*.key
+*.crt
+
+# ============================================
+# Project-Specific Exclusions
+# ============================================
+# Old/Legacy folders (if you want to keep them locally but not in git)
+# Gis_transportation/
+
+# Brain artifacts (Gemini AI conversation artifacts)
+.gemini/
+
+# ============================================
+# WHAT TO INCLUDE (Important Files to Track)
+# ============================================
+# These files SHOULD be tracked by Git:
+# ✅ Source code (.py, .tsx, .ts, .js, .css, .html)
+# ✅ Configuration files (package.json, requirements.txt, tsconfig.json, etc.)
+# ✅ Documentation (README.md, ARCHITECTURE.md)
+# ✅ .gitignore itself
+# ✅ Sample data files (for testing)
+# ✅ Database schema files (.sql)
+# ✅ Static assets (images, icons - if small)

@@ -1,237 +1,473 @@
+# 🚚 Vehicle Routing Optimization System
+
+A full-stack web application for optimizing vehicle routing with real-time visualization, built with React, FastAPI, PostgreSQL/PostGIS, and pgRouting.
+
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
+![React](https://img.shields.io/badge/react-18.3.1-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115.0-green.svg)
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [API Documentation](#api-documentation)
+- [Database Schema](#database-schema)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
+- [License](#license)
+
+> **📖 For Developers**: See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system architecture, data flow diagrams, and how the optimization process works.
+
+## 🎯 Overview
+
+This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP) with time windows and capacity constraints for logistics operations in Maharashtra, India. The system:
+
+- **Optimizes** delivery routes using Google OR-Tools
+- **Calculates** actual road distances using pgRouting on OpenStreetMap data
+- **Visualizes** routes on an interactive map with color-coded vehicle paths
+- **Manages** vehicle capacity, time windows, and service times
+- **Provides** real-time statistics and route analytics
+
+### Key Capabilities
+
+- Upload delivery data via CSV/Excel
+- Edit parcel details (weight, time windows, service time)
+- Configure warehouse location
+- Compute optimal routes with capacity and time constraints
+- View routes on interactive map with actual road geometries
+- Track vehicle utilization, costs, and schedules
+- Identify undelivered parcels
+
+## ✨ Features
+
+### 🎨 Frontend Features
+
+#### 1. Upload & Data Management
+- **Drag-and-Drop Upload**: Modern file upload interface supporting CSV and Excel formats
+- **Editable Data Table**: Interactive table with inline editing for all delivery parameters
+- **Data Validation**: Real-time validation of uploaded data
+- **Warehouse Configuration**: Set custom warehouse location (default: Mumbai)
+
+#### 2. Route Visualization
+- **Interactive Map**: MapTiler-powered map with zoom, pan, and marker interactions
+- **Color-Coded Routes**: 8 distinct colors for up to 8 vehicles
+- **Road-Based Paths**: Actual road geometries from pgRouting (not straight lines)
+- **Direction Arrows**: Visual indicators showing route direction
+- **Enhanced Visibility**: Darker, thicker route lines for better clarity
+
+#### 3. Statistics Dashboard
+- **Summary Cards**: Total distance, cost, parcels, and active fleets
+- **Vehicle Breakdown**: Expandable cards showing:
+  - Distance traveled and operational cost
+  - Weight carried vs capacity
+  - Utilization percentage with visual bar
+  - Clock-in and clock-out times
+  - Work duration
+  - Complete stop list with arrival times and status
+- **Undelivered Parcels**: Separate section highlighting unassigned deliveries
+
+### 🔧 Backend Features
+
+#### API Endpoints
+- `GET /api/health` - Health check
+- `POST /api/upload` - Upload CSV/Excel delivery data
+- `POST /api/update-data` - Update edited delivery data
+- `POST /api/warehouse` - Configure warehouse location
+- `POST /api/compute` - Trigger route optimization
+- `GET /api/results` - Retrieve optimized routes and statistics
+
+#### Optimization Engine
+- **OR-Tools VRP Solver**: Capacity and time window constraints
+- **pgRouting Integration**: Real-world distance matrix calculation
+- **Database Operations**: PostgreSQL/PostGIS for spatial data
+- **Route Geometry**: MultiLineString geometries for actual road paths
+
+## 🛠️ Technology Stack
+
+### Frontend
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| React | 18.3.1 | UI framework |
+| TypeScript | 5.6.3 | Type safety |
+| Vite | 6.0.3 | Build tool & dev server |
+| Tailwind CSS | 3.4.17 | Styling framework |
+| React Router | 6.28.0 | Client-side routing |
+| Axios | 1.7.9 | HTTP client |
+| MapTiler SDK | 2.3.0 | Map visualization |
+
+### Backend
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| FastAPI | 0.115.0 | Web framework |
+| Uvicorn | 0.32.0 | ASGI server |
+| Pandas | 2.2.3 | Data processing |
+| psycopg2-binary | 2.9.10 | PostgreSQL adapter |
+| OR-Tools | 9.11.4210 | Route optimization |
+| python-dotenv | 1.0.1 | Environment management |
+
+### Database
+- **PostgreSQL** 13+ with **PostGIS** and **pgRouting** extensions
+- Road network data from OpenStreetMap (Maharashtra)
+
+## 📁 Project Structure
+
 ```
--- Updated Query - SQL
--- 1. Reset the Mapping Table
-DROP TABLE IF EXISTS vector.station_node_map CASCADE;
+GisTransportation4/
+├── backend/
+│   ├── main.py                 # FastAPI application
+│   ├── database.py             # PostgreSQL operations
+│   ├── vrp_solver.py           # OR-Tools VRP solver
+│   ├── requirements.txt        # Python dependencies
+│   ├── .env                    # Environment variables (not in git)
+│   └── .gitignore
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── MapView.tsx    # Map visualization
+│   │   │   └── StatsPanel.tsx # Statistics dashboard
+│   │   ├── pages/
+│   │   │   ├── UploadPage.tsx # Upload & edit page
+│   │   │   └── ResultsPage.tsx # Results page
+│   │   ├── services/
+│   │   │   └── api.ts         # API service layer
+│   │   ├── types/
+│   │   │   └── api.ts         # TypeScript interfaces
+│   │   ├── App.tsx            # Router configuration
+│   │   ├── main.tsx           # Entry point
+│   │   └── index.css          # Global styles
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── tailwind.config.js
+│   ├── .env                    # Environment variables (not in git)
+│   └── .gitignore
+│
+├── README.md
+└── .gitignore
+```
+
+## 📦 Prerequisites
+
+- **Node.js** 18+ and npm
+- **Python** 3.9+
+- **PostgreSQL** 13+ with PostGIS and pgRouting extensions
+- **MapTiler API Key** (free tier available at [maptiler.com](https://www.maptiler.com))
+
+## 🚀 Installation
+
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd GisTransportation4
+```
+
+### 2. Backend Setup
+
+```bash
+cd backend
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# Windows:
+venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 3. Frontend Setup
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+```
+
+## ⚙️ Configuration
+
+### Backend Configuration
+
+Create `backend/.env` file:
+
+```env
+# Database Configuration
+DB_NAME=your_database_name
+DB_USER=your_username
+DB_PASSWORD=your_password
+DB_HOST=your_host
+DB_PORT=5432
+
+# Server Configuration
+HOST=0.0.0.0
+PORT=8000
+FRONTEND_URL=http://localhost:5173
+```
+
+### Frontend Configuration
+
+Create `frontend/.env` file:
+
+```env
+VITE_API_URL=http://localhost:8000
+VITE_MAPTILER_KEY=your_maptiler_api_key
+```
+
+### Database Setup
+
+Your PostgreSQL database should have:
+
+1. **PostGIS Extension**:
+```sql
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS pgrouting;
+```
+
+2. **Required Tables**:
+   - `vector.station_node_map` - Delivery stations
+   - `vector.road_maharashtra` - Road network
+   - `vector.distance_matrix` - Precomputed distances
+   - `vector.route_geometries` - Route paths
+
+## 🎮 Usage
+
+### Starting the Application
+
+#### Option 1: Manual Start
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
+venv\Scripts\activate  # Windows
+# source venv/bin/activate  # Linux/Mac
+python main.py
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npm run dev
+```
+
+#### Option 2: Quick Start (Windows)
+
+```bash
+start.bat
+```
+
+### Accessing the Application
+
+- **Frontend**: http://localhost:5173 (or http://localhost:5174 if 5173 is in use)
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs (Swagger UI)
+
+### Workflow
+
+1. **Upload Data**
+   - Navigate to http://localhost:5173
+   - Upload CSV/Excel file with columns: `id`, `latitude`, `longitude`
+   - Optional columns: `parcel_weight`, `service_time`, `window_start`, `window_end`
+
+2. **Edit Data** (Optional)
+   - Click any cell in the data table to edit
+   - Modify parcel weights, service times, or time windows
+   - Changes are saved automatically
+
+3. **Configure Warehouse** (Optional)
+   - Default: Mumbai (19.0725, 72.8724)
+   - Can be customized via API
+
+4. **Compute Routes**
+   - Click "Compute Optimal Routes"
+   - Backend performs:
+     - Data insertion to database
+     - Distance matrix calculation via pgRouting
+     - VRP optimization with OR-Tools
+     - Route geometry generation
+   - Processing time: 1-3 minutes for 50-100 deliveries
+
+5. **View Results**
+   - **Map**: Color-coded routes with actual road paths
+   - **Statistics**: Vehicle details, costs, utilization
+   - **Undelivered**: Any parcels that couldn't be assigned
+
+## 📚 API Documentation
+
+### Upload File
+
+```http
+POST /api/upload
+Content-Type: multipart/form-data
+
+Body: file (CSV/Excel)
+
+Response:
+{
+  "status": "success",
+  "message": "File uploaded successfully",
+  "data": [...],
+  "columns": [...],
+  "row_count": 50
+}
+```
+
+### Compute Routes
+
+```http
+POST /api/compute
+
+Response:
+{
+  "status": "success",
+  "message": "Route optimization completed. 8 vehicles used for 53 deliveries."
+}
+```
+
+### Get Results
+
+```http
+GET /api/results
+
+Response:
+{
+  "vehicles": [
+    {
+      "vehicle_id": 1,
+      "stations": [...],
+      "route_geometry": [...],
+      "total_distance": 71.88,
+      "total_cost": 1078.2,
+      "weight_carried": 174,
+      "capacity": 175,
+      "utilization": 99.4,
+      "work_duration": 143,
+      "color": "#FF6B6B",
+      "clock_in": "09:00 AM",
+      "clock_out": "11:23 AM"
+    },
+    ...
+  ],
+  "summary": {
+    "total_distance": 676.21,
+    "total_cost": 9723.30,
+    "total_parcels": 53,
+    "total_fleets": 8,
+    "warehouse": {...}
+  },
+  "parcels": [...],
+  "undelivered_parcels": [...]
+}
+```
+
+## 🗄️ Database Schema
+
+### vector.station_node_map
+
+Stores delivery station information and vehicle assignments.
+
+```sql
 CREATE TABLE vector.station_node_map (
-    station_id TEXT PRIMARY KEY,
+    station_id INTEGER PRIMARY KEY,
     nearest_node_id BIGINT,
-    parcel_weight INT DEFAULT 20,
-    geom geometry(Point, 4326)
+    geom GEOMETRY(Point, 4326),
+    parcel_weight INTEGER,
+    service_time INTEGER,
+    window_start INTEGER,
+    window_end INTEGER,
+    vehicle_id INTEGER
 );
+```
 
--- 2. Populate from your current sample table (e.g., sample_1_data)
--- This logic snaps your 60 points to the main road network (Component 11)
-INSERT INTO vector.station_node_map (station_id, nearest_node_id, geom)
-SELECT 
-    id,
-    (SELECT m.node 
-     FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m
-     JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node)
-     WHERE m.component = 11 
-     ORDER BY r.geom <-> s.geom LIMIT 1),
-    geom
-FROM vector.sample_1_data s; -- Change this table name for switching data
+### vector.route_geometries
 
------------------------------------------------------
+Stores computed route paths as MultiLineString geometries.
 
--- 1. Clear the old matrix
-TRUNCATE TABLE vector.distance_matrix;
--- Insert data into distance matrix
--- 2. Calculate costs between all nodes currently in the map (60 + Warehouse)
-INSERT INTO vector.distance_matrix (start_vid, end_vid, agg_cost)
-SELECT start_vid, end_vid, agg_cost
-FROM pgr_dijkstraCost(
-    'SELECT gid AS id, source, target, cost FROM vector.road_maharashtra',
-    (SELECT ARRAY_AGG(DISTINCT nearest_node_id) FROM vector.station_node_map) 
-    || (SELECT m.node FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m 
-        JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node)
-        WHERE m.component = 11 ORDER BY r.geom <-> ST_SetSRID(ST_Point(72.8724, 19.0725), 4326) LIMIT 1),
-    (SELECT ARRAY_AGG(DISTINCT nearest_node_id) FROM vector.station_node_map) 
-    || (SELECT m.node FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m 
-        JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node)
-        WHERE m.component = 11 ORDER BY r.geom <-> ST_SetSRID(ST_Point(72.8724, 19.0725), 4326) LIMIT 1),
-    directed := false
+```sql
+CREATE TABLE vector.route_geometries (
+    id SERIAL PRIMARY KEY,
+    vehicle_id INTEGER,
+    route_geom GEOMETRY(MultiLineString, 4326),
+    total_distance_km NUMERIC
 );
-------------------------------------------
-SELECT * FROM vector.distance_matrix;
-----------------
-SELECT * FROM vector.final_station_clusters;
-----------------
-SELECT * FROM vector.route_geometries;
-----------------
--- This query checks how many distance pairs exist for the stations currently in your map
-SELECT 
-    (SELECT COUNT(*) FROM vector.station_node_map) as stations_in_map,
-    COUNT(dm.*) as matching_distances_found
-FROM vector.distance_matrix dm
-WHERE dm.start_vid IN (SELECT nearest_node_id FROM vector.station_node_map)
-  AND dm.end_vid IN (SELECT nearest_node_id FROM vector.station_node_map);
-
-  -------
-
-  SELECT COUNT(*) FROM vector.distance_matrix 
-WHERE start_vid = 175614 OR end_vid = 175614;
-
----------------
-
-SELECT 
-    cluster_id AS vehicle_id,
-    COUNT(station_id) AS parcel_count,
-    SUM(weight) AS total_weight_kg
-FROM vector.final_station_clusters
-GROUP BY cluster_id
-ORDER BY cluster_id;
-
-------------------------
--- Run all queries till here after this run the python script and then below query
-
-SELECT 
-    v.id AS vehicle_id,
-    COUNT(DISTINCT f.station_id) AS parcel_count,
-    COALESCE(SUM(f.weight), 0) AS total_weight_kg,
-    ROUND((SELECT COALESCE(SUM(ST_Length(geom::geography))/1000, 0) 
-           FROM vector.route_geometries 
-           WHERE vehicle_id = v.id)::numeric, 2) AS total_km
-FROM (SELECT generate_series(1,8) AS id) v 
-LEFT JOIN vector.final_station_clusters f ON v.id = f.cluster_id
-GROUP BY v.id
-ORDER BY v.id;
-
-```
-### Run the script solve_clusters.py
-## see output in console
-![Console output](image-1.png)
-
-## run the last block of SQL query 
-![SQL output](image.png)
-
-## Updated logic - output 
-![SQL query output](image-2.png)
-
-## After Adding Time window constraints
-![VRP Time ZWindow](image-3.png)
-
-# Run this query to get overview of vehicle id, time window, service time window
-```
-SELECT * FROM vector.station_node_map
-ORDER BY station_id ASC 
-```
-![alt text](image-4.png)
-
-# Final Console Output 
 ```
 
-PS C:\Users\91832\Desktop\AIQ\GisTransportation2> python solve_clusters.py
+## 🎨 Color Scheme
 
-==================================================
-SUCCESS: SAVING ROUTES & CALCULATING ARRIVAL TIMES
-==================================================
+Vehicle routes use distinct colors for easy identification:
 
---- Vehicle 1 Route ---
-Warehouse (Start) | Clock-in: 09:00 AM
-Warehouse       | Arrives: 09:00 AM [IDEAL]
-Station 3490    | Arrives: 09:39 AM [IDEAL]
-Station 11625   | Arrives: 09:58 AM [IN BUFFER]
-Station 3645    | Arrives: 10:38 AM [IDEAL]
-Station 3597    | Arrives: 11:23 AM [IN BUFFER]
-Station 3666    | Arrives: 11:45 AM [IN BUFFER]
-Station 3661    | Arrives: 12:00 PM [IDEAL]
-Station 3657    | Arrives: 12:18 PM [IDEAL]
-Station 3566    | Arrives: 12:44 PM [IDEAL]
-Warehouse (End) | Arrives: 02:09 PM
-Total Work Duration: 309 minutes [ON TIME]
-Vehicle 1: Geometry and assignments saved.
+| Vehicle | Color | Hex Code |
+|---------|-------|----------|
+| Vehicle 1 | Red | #FF6B6B |
+| Vehicle 2 | Teal | #4ECDC4 |
+| Vehicle 3 | Blue | #45B7D1 |
+| Vehicle 4 | Orange | #FFA07A |
+| Vehicle 5 | Mint | #98D8C8 |
+| Vehicle 6 | Yellow | #F7DC6F |
+| Vehicle 7 | Purple | #BB8FCE |
+| Vehicle 8 | Light Blue | #85C1E2 |
 
---- Vehicle 2 Route ---
-Warehouse (Start) | Clock-in: 09:00 AM
-Warehouse       | Arrives: 09:00 AM [IDEAL]
-Station 3166    | Arrives: 09:03 AM [IDEAL]
-Station 3105    | Arrives: 09:28 AM [IDEAL]
-Station 3163    | Arrives: 09:52 AM [IN BUFFER]
-Station 3151    | Arrives: 10:10 AM [IDEAL]
-Station 3156    | Arrives: 10:30 AM [IDEAL]
-Station 3157    | Arrives: 10:46 AM [IDEAL]
-Warehouse (End) | Arrives: 11:13 AM
-Total Work Duration: 133 minutes [ON TIME]
-Vehicle 2: Geometry and assignments saved.
+## 🚀 Deployment
 
---- Vehicle 3 Route ---
-Warehouse (Start) | Clock-in: 07:00 AM
-Warehouse       | Arrives: 07:00 AM [IDEAL]
-Station 3169    | Arrives: 07:07 AM [IDEAL]
-Station 11603   | Arrives: 07:50 AM [IN BUFFER]
-Station 3455    | Arrives: 08:18 AM [IDEAL]
-Station 3472    | Arrives: 08:41 AM [IDEAL]
-Station 3476    | Arrives: 08:48 AM [IN BUFFER]
-Station 3485    | Arrives: 09:23 AM [IDEAL]
-Station 3499    | Arrives: 09:40 AM [IDEAL]
-Station 3449    | Arrives: 09:51 AM [IDEAL]
-Warehouse (End) | Arrives: 10:30 AM
-Total Work Duration: 210 minutes [ON TIME]
-Vehicle 3: Geometry and assignments saved.
+### Backend Deployment
 
---- Vehicle 4 Route ---
-Warehouse (Start) | Clock-in: 07:00 AM
-Warehouse       | Arrives: 07:00 AM [IDEAL]
-Station 3535    | Arrives: 07:53 AM [IDEAL]
-Station 3546    | Arrives: 08:07 AM [IDEAL]
-Station 3534    | Arrives: 08:30 AM [IDEAL]
-Station 3526    | Arrives: 08:37 AM [IDEAL]
-Station 3520    | Arrives: 08:56 AM [IDEAL]
-Station 3522    | Arrives: 09:19 AM [IN BUFFER]
-Station 3510    | Arrives: 09:38 AM [IN BUFFER]
-Station 3504    | Arrives: 10:00 AM [IN BUFFER]
-Warehouse (End) | Arrives: 10:57 AM
-Total Work Duration: 237 minutes [ON TIME]
-Vehicle 4: Geometry and assignments saved.
+1. Set up PostgreSQL database with PostGIS and pgRouting
+2. Load road network data (OpenStreetMap)
+3. Configure environment variables
+4. Deploy using:
+   - Docker container
+   - Cloud services (AWS, Azure, GCP)
+   - Traditional server with systemd
 
---- Vehicle 5 Route ---
-Warehouse (Start) | Clock-in: 09:00 AM
-Warehouse       | Arrives: 09:00 AM [IDEAL]
-Station 3025    | Arrives: 09:16 AM [IN BUFFER]
-Station 3067    | Arrives: 09:29 AM [IDEAL]
-Station 3061    | Arrives: 09:40 AM [IDEAL]
-Station 3046    | Arrives: 10:00 AM [IDEAL]
-Station 3063    | Arrives: 10:09 AM [IDEAL]
-Station 3135    | Arrives: 10:43 AM [IDEAL]
-Station 3132    | Arrives: 10:57 AM [IDEAL]
-Station 3011    | Arrives: 11:15 AM [IN BUFFER]
-Warehouse (End) | Arrives: 11:31 AM
-Total Work Duration: 151 minutes [ON TIME]
-Vehicle 5: Geometry and assignments saved.
+### Frontend Deployment
 
---- Vehicle 6 Route ---
-Warehouse (Start) | Clock-in: 08:00 AM
-Warehouse       | Arrives: 08:00 AM [IDEAL]
-Station 11606   | Arrives: 08:30 AM [IN BUFFER]
-Station 3629    | Arrives: 09:16 AM [IN BUFFER]
-Station 12204   | Arrives: 10:37 AM [IN BUFFER]
-Station 12205   | Arrives: 10:57 AM [IN BUFFER]
-Station 12217   | Arrives: 11:51 AM [IDEAL]
-Station 12201   | Arrives: 12:07 PM [IDEAL]
-Station 12199   | Arrives: 01:29 PM [IDEAL]
-Station 3052    | Arrives: 02:27 PM [IN BUFFER]
-Warehouse (End) | Arrives: 03:11 PM
-Total Work Duration: 431 minutes [ON TIME]
-Vehicle 6: Geometry and assignments saved.
-
---- Vehicle 7 Route ---
-Warehouse (Start) | Clock-in: 08:00 AM
-Warehouse       | Arrives: 08:00 AM [IDEAL]
-Station 2987    | Arrives: 08:20 AM [IN BUFFER]
-Station 2980    | Arrives: 08:36 AM [IDEAL]
-Station 2978    | Arrives: 08:54 AM [IDEAL]
-Station 3013    | Arrives: 09:20 AM [IDEAL]
-Station 3162    | Arrives: 09:37 AM [IN BUFFER]
-Station 3150    | Arrives: 09:57 AM [IDEAL]
-Warehouse (End) | Arrives: 10:28 AM
-Total Work Duration: 148 minutes [ON TIME]
-Vehicle 7: Geometry and assignments saved.
-
---- Vehicle 8 Route ---
-Warehouse (Start) | Clock-in: 07:00 AM
-Warehouse       | Arrives: 07:00 AM [IDEAL]
-Station 3137    | Arrives: 07:14 AM [IN BUFFER]
-Station 3558    | Arrives: 08:34 AM [IDEAL]
-Station 3577    | Arrives: 08:49 AM [IN BUFFER]
-Station 3580    | Arrives: 09:13 AM [IN BUFFER]
-Station 3588    | Arrives: 09:36 AM [IDEAL]
-Station 3562    | Arrives: 09:52 AM [IDEAL]
-Station 3616    | Arrives: 11:00 AM [IN BUFFER]
-Station 3617    | Arrives: 11:23 AM [IDEAL]
-Warehouse (End) | Arrives: 01:07 PM
-Total Work Duration: 367 minutes [ON TIME]
-Vehicle 8: Geometry and assignments saved.
-
-Success: Balanced weight and road routes saved to database.
+```bash
+cd frontend
+npm run build
 ```
+
+Deploy the `dist/` folder to:
+- Netlify
+- Vercel
+- AWS S3 + CloudFront
+- Any static hosting service
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🙏 Acknowledgments
+
+- **Google OR-Tools** for the VRP solver
+- **pgRouting** for road network routing
+- **MapTiler** for map visualization
+- **OpenStreetMap** contributors for road data
+
+## 📞 Support
+
+For issues, questions, or contributions, please open an issue on GitHub.
+
+---
+
+**Built with ❤️ for optimizing logistics operations**
