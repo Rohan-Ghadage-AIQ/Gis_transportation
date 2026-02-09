@@ -1,6 +1,6 @@
 # 🚚 Vehicle Routing Optimization System
 
-A full-stack web application for optimizing vehicle routing with real-time visualization, built with React, FastAPI, PostgreSQL/PostGIS, and pgRouting.
+A full-stack web application for optimizing vehicle routing with real-time visualization, built with React, FastAPI, PostgreSQL/PostGIS, and pgRouting .
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
@@ -174,8 +174,8 @@ cd GisTransportation4
 ```bash
 cd backend
 
-# Create virtual environment
-python -m venv venv
+# Create virtual environment 
+python -m venv venv 
 
 # Activate virtual environment
 # Windows:
