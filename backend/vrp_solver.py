@@ -54,10 +54,10 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         if u in node_to_idx and v in node_to_idx:
             dist_matrix[node_to_idx[u]][node_to_idx[v]] = int(float(cost))
     
-    # Vehicle configuration
-    num_vehicles = 8
-    vehicle_capacities = [175, 261, 348, 156, 178, 142, 118, 125]
-    vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10]
+    # Vehicle configuration - Increased to 10 vehicles to handle all deliveries
+    num_vehicles = 10
+    vehicle_capacities = [175, 261, 348, 156, 178, 142, 118, 125, 200, 180]
+    vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10, 12, 14]
     vehicle_times = [
         (120, 660), (120, 660),  # V1, V2: 9 AM - 6 PM
         (0, 480),                # V3: 7 AM - 3 PM
@@ -65,7 +65,9 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         (120, 600),              # V5: 9 AM - 5 PM
         (60, 660),               # V6: 8 AM - 6 PM
         (60, 840),               # V7: 8 AM - 9 PM
-        (0, 780)                 # V8: 7 AM - 8 PM
+        (0, 780),                # V8: 7 AM - 8 PM
+        (0, 720),                # V9: 7 AM - 7 PM
+        (60, 780)                # V10: 8 AM - 8 PM
     ]
     
     # Create routing model
@@ -112,9 +114,10 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
         routing.SetFixedCostOfVehicle(10000, v)
     
-    # Penalty for dropping parcels
+    # Penalty for dropping parcels - EXTREMELY HIGH to ensure all parcels are delivered
+    # This makes it almost impossible for the solver to drop a parcel
     for i in range(1, size):
-        routing.AddDisjunction([manager.NodeToIndex(i)], 10000000)
+        routing.AddDisjunction([manager.NodeToIndex(i)], 100000000)  # 10x higher penalty!
     
     # Cost callback per vehicle
     def create_cost_callback(v_idx):
@@ -147,16 +150,33 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     capacity_dimension = routing.GetDimensionOrDie('Capacity')
     for i in range(num_vehicles):
         index = routing.End(i)
-        capacity_dimension.SetCumulVarSoftUpperBound(index, 250, 1000)
+        # Relax soft capacity bounds to allow slight overloading if needed
+        capacity_dimension.SetCumulVarSoftUpperBound(index, 300, 500)
         routing.SetFixedCostOfVehicle(10000, i)
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.Start(i)))
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.End(i)))
     
-    # Solve
+    # Solve with optimized parameters for speed
     search_params = pywrapcp.DefaultRoutingSearchParameters()
-    search_params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION
+    
+    # Use SAVINGS strategy - faster than PARALLEL_CHEAPEST_INSERTION
+    # Builds routes by iteratively merging routes that save the most distance
+    search_params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.SAVINGS
+    
+    # Use GUIDED_LOCAL_SEARCH for refinement (good balance of speed vs quality)
     search_params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    search_params.time_limit.seconds = 180
+    
+    # Reduce time limit from 180s to 30s (6x faster!)
+    search_params.time_limit.seconds = 30
+    
+    # Add solution limit - stop if we find a good solution early
+    search_params.solution_limit = 200
+    
+    # Limit LNS (Large Neighborhood Search) time for faster local search
+    search_params.lns_time_limit.seconds = 5
+    
+    # Log search progress (optional - can be disabled in production)
+    search_params.log_search = False
     
     solution = routing.SolveWithParameters(search_params)
     

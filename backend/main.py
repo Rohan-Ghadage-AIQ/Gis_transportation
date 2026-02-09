@@ -284,23 +284,40 @@ async def get_results():
         parcels = []
         total_cost = 0
         
-        # Vehicle clock-in times (matching vrp_solver.py)
-        vehicle_times = [
-            ("09:00 AM", 540),  # V1: 9 AM - 6 PM
-            ("09:00 AM", 540),  # V2: 9 AM - 6 PM
-            ("07:00 AM", 360),  # V3: 7 AM - 3 PM
-            ("07:00 AM", 540),  # V4: 7 AM - 6 PM
-            ("09:00 AM", 480),  # V5: 9 AM - 5 PM
-            ("08:00 AM", 600),  # V6: 8 AM - 6 PM
-            ("08:00 AM", 720),  # V7: 8 AM - 9 PM
-            ("07:00 AM", 660)   # V8: 7 AM - 8 PM
+        # Vehicle colors (10 distinct colors)
+        VEHICLE_COLORS = [
+            "#FF6B6B",  # Red
+            "#4ECDC4",  # Teal
+            "#45B7D1",  # Blue
+            "#FFA07A",  # Light Salmon
+            "#98D8C8",  # Mint
+            "#F7DC6F",  # Yellow
+            "#BB8FCE",  # Purple
+            "#85C1E2",  # Sky Blue
+            "#F8B739",  # Orange
+            "#52C77A"   # Green
         ]
         
-        # Vehicle costs per km
-        vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10]
+        # Vehicle time windows (10 vehicles)
+        vehicle_times = [
+            ("09:00 AM", 660),  # V1: 9 AM - 6 PM
+            ("09:00 AM", 660),  # V2: 9 AM - 6 PM
+            ("07:00 AM", 480),  # V3: 7 AM - 3 PM
+            ("07:00 AM", 660),  # V4: 7 AM - 6 PM
+            ("09:00 AM", 600),  # V5: 9 AM - 5 PM
+            ("08:00 AM", 660),  # V6: 8 AM - 6 PM
+            ("08:00 AM", 840),  # V7: 8 AM - 9 PM
+            ("07:00 AM", 780),  # V8: 7 AM - 8 PM
+            ("07:00 AM", 720),  # V9: 7 AM - 7 PM
+            ("08:00 AM", 780)   # V10: 8 AM - 8 PM
+        ]
         
-        # Vehicle capacities
-        vehicle_capacities = [175, 261, 348, 156, 178, 142, 118, 125]
+        # Vehicle costs per km (10 vehicles)
+        vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10, 12, 14]
+        
+        # Vehicle capacities (10 vehicles)
+        vehicle_capacities = [175, 261, 348, 156, 178, 142, 118, 125, 200, 180]
+        
         
         for vehicle in summary_data["vehicles"]:
             vehicle_id = vehicle["vehicle_id"]
@@ -316,6 +333,11 @@ async def get_results():
                 }
                 for s in stations_data if s[3] == vehicle_id
             ]
+            
+            # CRITICAL FIX: Skip vehicles with no assigned parcels
+            # This prevents showing empty vehicles with fake distance/cost/times
+            if len(vehicle_stations) == 0:
+                continue
             
             # Add to parcels list
             for s in stations_data:

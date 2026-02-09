@@ -42,10 +42,24 @@ def insert_stations_from_dataframe(conn, df: pd.DataFrame, warehouse_lon: float 
     Snaps each station to the nearest node in the main road network (component 11).
     
     Expected DataFrame columns: id, latitude, longitude (and optionally: parcel_weight, service_time, window_start, window_end)
+    
+    Optimization: Pre-fetches main component nodes once instead of querying for each station.
     """
     cur = conn.cursor()
     
-    # Insert stations with nearest node snapping
+    # Pre-fetch all nodes in main component (component 11) - do this ONCE
+    # This is much faster than calling pgr_connectedComponents for each station
+    cur.execute("""
+        CREATE TEMP TABLE IF NOT EXISTS temp_main_component_nodes AS
+        SELECT DISTINCT m.node, r.geom
+        FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m
+        JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node)
+        WHERE m.component = 11;
+        
+        CREATE INDEX IF NOT EXISTS idx_temp_main_nodes_geom ON temp_main_component_nodes USING GIST (geom);
+    """)
+    
+    # Insert stations with nearest node snapping (using pre-fetched nodes)
     for _, row in df.iterrows():
         station_id = str(row['id'])
         lat = float(row['latitude'])
@@ -55,18 +69,21 @@ def insert_stations_from_dataframe(conn, df: pd.DataFrame, warehouse_lon: float 
         window_start = int(row.get('window_start', 0))
         window_end = int(row.get('window_end', 480))
         
-        cur.execute(f"""
+        # Use pre-fetched main component nodes for faster lookups
+        cur.execute("""
             INSERT INTO vector.station_node_map (station_id, nearest_node_id, parcel_weight, service_time, window_start, window_end, geom)
             SELECT 
                 %s,
-                (SELECT m.node 
-                 FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m
-                 JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node)
-                 WHERE m.component = 11 
-                 ORDER BY r.geom <-> ST_SetSRID(ST_Point(%s, %s), 4326) LIMIT 1),
+                (SELECT node 
+                 FROM temp_main_component_nodes
+                 ORDER BY geom <-> ST_SetSRID(ST_Point(%s, %s), 4326) 
+                 LIMIT 1),
                 %s, %s, %s, %s,
                 ST_SetSRID(ST_Point(%s, %s), 4326)
         """, (station_id, lon, lat, weight, service_time, window_start, window_end, lon, lat))
+    
+    # Clean up temp table
+    cur.execute("DROP TABLE IF EXISTS temp_main_component_nodes;")
     
     conn.commit()
     cur.close()
@@ -113,31 +130,51 @@ def randomize_station_attributes(conn):
 
 def calculate_distance_matrix(conn, warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725):
     """
-    Calculate distance matrix using pgRouting's pgr_dijkstraCost.
+    Calculate distance matrix using pgRouting's pgr_dijkstraCost (optimized for bulk calculations).
     Includes all stations plus the warehouse node.
+    
+    Optimizations:
+    1. Uses pgr_dijkstraCost instead of individual pgr_dijkstra calls
+    2. Adds spatial indexes for faster nearest node lookups
+    3. Caches warehouse node to avoid repeated lookups
     """
     cur = conn.cursor()
+    
+    # Create spatial index on road network if not exists (one-time operation)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_road_maharashtra_geom 
+        ON vector.road_maharashtra USING GIST (geom);
+    """)
+    
+    # Create index on source/target for faster routing
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_road_maharashtra_source 
+        ON vector.road_maharashtra (source);
+        
+        CREATE INDEX IF NOT EXISTS idx_road_maharashtra_target 
+        ON vector.road_maharashtra (target);
+    """)
+    
+    conn.commit()
     
     # Truncate existing matrix
     cur.execute("TRUNCATE TABLE vector.distance_matrix;")
     
-    # Calculate distances
-    cur.execute(f"""
+    # Get warehouse node once (cached)
+    warehouse_node = get_warehouse_node(conn, warehouse_lon, warehouse_lat)
+    
+    # Calculate distances using pgr_dijkstraCost (bulk operation - much faster!)
+    # This calculates all-pairs shortest paths in one query
+    cur.execute("""
         INSERT INTO vector.distance_matrix (start_vid, end_vid, agg_cost)
         SELECT start_vid, end_vid, agg_cost
         FROM pgr_dijkstraCost(
             'SELECT gid AS id, source, target, cost FROM vector.road_maharashtra',
-            (SELECT ARRAY_AGG(DISTINCT nearest_node_id) FROM vector.station_node_map) 
-            || (SELECT m.node FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m 
-                JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node)
-                WHERE m.component = 11 ORDER BY r.geom <-> ST_SetSRID(ST_Point({warehouse_lon}, {warehouse_lat}), 4326) LIMIT 1),
-            (SELECT ARRAY_AGG(DISTINCT nearest_node_id) FROM vector.station_node_map) 
-            || (SELECT m.node FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m 
-                JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node)
-                WHERE m.component = 11 ORDER BY r.geom <-> ST_SetSRID(ST_Point({warehouse_lon}, {warehouse_lat}), 4326) LIMIT 1),
+            (SELECT ARRAY_AGG(DISTINCT nearest_node_id) FROM vector.station_node_map) || ARRAY[%s],
+            (SELECT ARRAY_AGG(DISTINCT nearest_node_id) FROM vector.station_node_map) || ARRAY[%s],
             directed := false
         );
-    """)
+    """, (warehouse_node, warehouse_node))
     
     conn.commit()
     cur.close()
@@ -192,28 +229,49 @@ def save_route_geometry(conn, vehicle_id: int, route_nodes: List[int]):
     """
     Save road geometries as MultiLineStrings using pgRouting.
     This creates actual road-based routes, not straight lines.
+    
+    Optimization: Uses a single batched query with LATERAL join instead of
+    individual queries for each segment (reduces 56+ queries to 1 per vehicle).
     """
     cur = conn.cursor()
     
     # Clean old geometry for this vehicle
     cur.execute("DELETE FROM vector.route_geometries WHERE vehicle_id = %s", (vehicle_id,))
     
-    for i in range(len(route_nodes) - 1):
-        start = route_nodes[i]
-        end = route_nodes[i+1]
-        
-        # Find actual road path between two nodes
-        insert_query = f"""
-            INSERT INTO vector.route_geometries (vehicle_id, geom)
-            SELECT {vehicle_id}, ST_Multi(ST_Collect(geom))
+    if len(route_nodes) < 2:
+        cur.close()
+        return
+    
+    # Build pairs of (start, end) nodes for all segments
+    segments = [(route_nodes[i], route_nodes[i+1]) for i in range(len(route_nodes) - 1)]
+    
+    # Batch query: Calculate all route segments in one query using LATERAL join
+    # This is MUCH faster than individual queries
+    insert_query = """
+        INSERT INTO vector.route_geometries (vehicle_id, geom)
+        SELECT %s, ST_Multi(ST_Collect(geom ORDER BY seq))
+        FROM (
+            SELECT UNNEST(%s::bigint[]) as start_node, 
+                   UNNEST(%s::bigint[]) as end_node
+        ) AS segments
+        CROSS JOIN LATERAL (
+            SELECT geom, seq
             FROM pgr_dijkstra(
                 'SELECT gid AS id, source, target, cost FROM vector.road_maharashtra',
-                {start}, {end}, directed := false
+                segments.start_node,
+                segments.end_node,
+                directed := false
             ) AS di
             JOIN vector.road_maharashtra ro ON di.edge = ro.gid
-            HAVING ST_Collect(geom) IS NOT NULL;
-        """
-        cur.execute(insert_query)
+        ) AS route_geoms
+        WHERE geom IS NOT NULL
+        HAVING ST_Collect(geom ORDER BY seq) IS NOT NULL;
+    """
+    
+    start_nodes = [s[0] for s in segments]
+    end_nodes = [s[1] for s in segments]
+    
+    cur.execute(insert_query, (vehicle_id, start_nodes, end_nodes))
     
     conn.commit()
     cur.close()
@@ -254,7 +312,7 @@ def fetch_results_summary(conn) -> Dict[str, Any]:
     """
     cur = conn.cursor(cursor_factory=RealDictCursor)
     
-    # Get vehicle statistics
+    # Get vehicle statistics (updated to 10 vehicles)
     cur.execute("""
         SELECT 
             v.id AS vehicle_id,
@@ -263,7 +321,7 @@ def fetch_results_summary(conn) -> Dict[str, Any]:
             ROUND((SELECT COALESCE(SUM(ST_Length(geom::geography))/1000, 0) 
                    FROM vector.route_geometries 
                    WHERE vehicle_id = v.id)::numeric, 2) AS total_km
-        FROM (SELECT generate_series(1,8) AS id) v 
+        FROM (SELECT generate_series(1,10) AS id) v 
         LEFT JOIN vector.station_node_map f ON v.id = f.vehicle_id
         GROUP BY v.id
         ORDER BY v.id;
