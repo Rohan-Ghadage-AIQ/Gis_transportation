@@ -175,7 +175,9 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     # Prepare results
     cur.execute("CREATE TABLE IF NOT EXISTS vector.route_geometries (vehicle_id integer, geom geometry);")
     cur.execute("ALTER TABLE vector.station_node_map ADD COLUMN IF NOT EXISTS vehicle_id integer;")
-    cur.execute("UPDATE vector.station_node_map SET vehicle_id = NULL;")
+    cur.execute("ALTER TABLE vector.station_node_map ADD COLUMN IF NOT EXISTS arrival_time text;")
+    cur.execute("ALTER TABLE vector.station_node_map ADD COLUMN IF NOT EXISTS delivery_status text;")
+    cur.execute("UPDATE vector.station_node_map SET vehicle_id = NULL, arrival_time = NULL, delivery_status = NULL;")
     
     routes = []
     
@@ -211,11 +213,14 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
                     "status": status
                 })
                 
+                # Store arrival time and status in database
                 cur.execute("""
                     UPDATE vector.station_node_map 
-                    SET vehicle_id = %s 
+                    SET vehicle_id = %s,
+                        arrival_time = %s,
+                        delivery_status = %s
                     WHERE station_id = %s
-                """, (v_id + 1, station_ids[node_idx]))
+                """, (v_id + 1, min_to_clock(arrival_min), status, station_ids[node_idx]))
             
             index = solution.Value(routing.NextVar(index))
         

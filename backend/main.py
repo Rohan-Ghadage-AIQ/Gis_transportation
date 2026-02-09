@@ -261,7 +261,8 @@ async def get_results():
         # Fetch station assignments with details
         cur.execute("""
             SELECT station_id, nearest_node_id, parcel_weight, vehicle_id,
-                   ST_X(geom) as longitude, ST_Y(geom) as latitude
+                   ST_X(geom) as longitude, ST_Y(geom) as latitude,
+                   arrival_time, delivery_status
             FROM vector.station_node_map
             WHERE vehicle_id IS NOT NULL
             ORDER BY vehicle_id, station_id
@@ -304,14 +305,14 @@ async def get_results():
         for vehicle in summary_data["vehicles"]:
             vehicle_id = vehicle["vehicle_id"]
             
-            # Get stations for this vehicle
+            # Get stations for this vehicle with arrival times and status
             vehicle_stations = [
                 {
                     "station_id": str(s[0]),
                     "lat": float(s[5]),
                     "lon": float(s[4]),
-                    "arrival_time": "08:00 AM",  # Placeholder - would come from solver
-                    "status": "IDEAL"  # Placeholder - would come from solver
+                    "arrival_time": s[6] if len(s) > 6 and s[6] else "N/A",  # arrival_time from DB
+                    "status": s[7] if len(s) > 7 and s[7] else "UNKNOWN"      # delivery_status from DB
                 }
                 for s in stations_data if s[3] == vehicle_id
             ]
