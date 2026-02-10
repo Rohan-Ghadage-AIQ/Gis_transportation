@@ -87,7 +87,7 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     routing.AddDimension(
         time_callback_index,
         60,   # slack
-        720,  # 12 hours total shift
+        840,  # 14 hours total shift (increased from 720 to match time windows)
         False,
         'Time'
     )
@@ -166,8 +166,8 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     # Use GUIDED_LOCAL_SEARCH for refinement (good balance of speed vs quality)
     search_params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
     
-    # Reduce time limit from 180s to 30s (6x faster!)
-    search_params.time_limit.seconds = 30
+    # Increase time limit from 30s to 60s for better solutions
+    search_params.time_limit.seconds = 60
     
     # Add solution limit - stop if we find a good solution early
     search_params.solution_limit = 200

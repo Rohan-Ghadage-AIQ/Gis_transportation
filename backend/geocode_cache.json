@@ -1,0 +1,401 @@
+{
+  "d57429d86dfefdb1e426dfaa8e40b0f3": {
+    "latitude": 19.119331,
+    "longitude": 72.845019,
+    "formatted_address": "Bses Mg Hospital (Managed By)Brahma Kumari Global Hospital and Res Center, Swami Vivekanand Road, Gaondevi Dongri, Andheri West, K/W Ward, Zone 3, Mumbai, Mumbai Suburban, Maharashtra, 400058, India",
+    "confidence": 7.599526970316652e-05,
+    "source": "nominatim"
+  },
+  "941d2b9d4ca7ef7f37a139d7f7dbf180": {
+    "latitude": 19.0616699,
+    "longitude": 72.8360252,
+    "formatted_address": "Linking Road, Linking Road Shopping area, Khar, Bandra West, Zone 3, Mumbai, Mumbai Suburban, Maharashtra, 400050, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "cdb7a92f808e84127b3e249b921bb768": {
+    "latitude": 19.1183882,
+    "longitude": 72.911464,
+    "formatted_address": "Hiranandani Gardens, Powai, S Ward, Zone 6, Mumbai, Mumbai Suburban, Maharashtra, 400076, India",
+    "confidence": 0.08007599526970319,
+    "source": "nominatim"
+  },
+  "53b045d9035d38d046f4acddfabf1399": {
+    "latitude": 19.014599,
+    "longitude": 72.8386283,
+    "formatted_address": "Senapati Bapat Marg, Dadar West, G/N Ward, Zone 2, Mumbai City, Maharashtra, 400028, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "4233a63b25944aeb0204e99e394a03c2": {
+    "latitude": 18.5220938,
+    "longitude": 73.8412187,
+    "formatted_address": "FC Road, Gopal Krushna Gokhale Path, Deccan Gymkhana, Pune City, Pune, Maharashtra, 411004, India",
+    "confidence": 6.893644617375475e-05,
+    "source": "nominatim"
+  },
+  "35c48d9593bf5d667c602e169e676d53": {
+    "latitude": 18.5366225,
+    "longitude": 73.8932738,
+    "formatted_address": "Koregaon Park, Ghorpuri, Pune, Pune City, Pune, Maharashtra, 411001, India",
+    "confidence": 0.08006893644617377,
+    "source": "nominatim"
+  },
+  "6793e52d39fd1b744fbb3c542add067c": {
+    "latitude": 18.5958868,
+    "longitude": 73.7408138,
+    "formatted_address": "Shatayu Hospital Hinjewadi, bldg 275/1, Dange Chowk Road, Hinjawadi, Mulshi, Pune, Maharashtra, 411057, India",
+    "confidence": 5.38849469748534e-05,
+    "source": "nominatim"
+  },
+  "8e0e2d2679f7dae4c1785af4a4f20179": {
+    "latitude": 18.5703877,
+    "longitude": 73.9133336,
+    "formatted_address": "Viman Nagar, Pune, Pune City, Pune, Maharashtra, 411001, India",
+    "confidence": 0.1773516541617975,
+    "source": "nominatim"
+  },
+  "9bf6f81b83294689cd5601c4bead8a87": {
+    "latitude": 18.5618834,
+    "longitude": 73.8101957,
+    "formatted_address": "Aundh, Pune, Pune City, Pune, Maharashtra, 411027, India",
+    "confidence": 0.3538242275522032,
+    "source": "nominatim"
+  },
+  "17646b5e1958990d90fb5a82df4f79da": {
+    "latitude": 19.1899244,
+    "longitude": 72.9696211,
+    "formatted_address": "Chatrapati Sambhaji Road, Naupada, Thane, Thane Taluka, Thane, Maharashtra, 400602, India",
+    "confidence": 0.05339155031662467,
+    "source": "nominatim"
+  },
+  "3dce7bfb88846d5030ccf99deca886c1": {
+    "latitude": 19.1943294,
+    "longitude": 72.9701779,
+    "formatted_address": "Thane, Thane Taluka, Thane, Maharashtra, India",
+    "confidence": 0.524664814479914,
+    "source": "nominatim"
+  },
+  "38eb05bc0a342789d18053170d3f7e55": {
+    "latitude": 19.2130251,
+    "longitude": 72.9784852,
+    "formatted_address": "Majiwada, Thane, Thane Taluka, Thane, Maharashtra, 400601, India",
+    "confidence": 0.146724883649958,
+    "source": "nominatim"
+  },
+  "46e5e2066dd4cc1a94a9cd4bfd3a3437": {
+    "latitude": 19.183688,
+    "longitude": 73.0194762,
+    "formatted_address": "Mumbra-Kausa Bypass, Amrut Nagar, Reti Bandar, Thane, Thane Taluka, Thane, Maharashtra, 400612, India",
+    "confidence": 0.05339155031662467,
+    "source": "nominatim"
+  },
+  "59abb3088303b1e54db99cc45f987638": {
+    "latitude": 19.1899425,
+    "longitude": 73.0230752,
+    "formatted_address": "Mumbra, Mumbra Flyover, Mumbra, Reti Bandar, Thane, Thane Taluka, Thane, Maharashtra, 400612, India",
+    "confidence": 0.2923164171266958,
+    "source": "nominatim"
+  },
+  "0c381f852976c80e22c29fa4a3d9767e": {
+    "latitude": 19.1943294,
+    "longitude": 72.9701779,
+    "formatted_address": "Thane, Thane Taluka, Thane, Maharashtra, India",
+    "confidence": 0.524664814479914,
+    "source": "nominatim"
+  },
+  "1079eb8204a4f9d434f6a0c45de24238": {
+    "latitude": 19.3591729,
+    "longitude": 72.9152322,
+    "formatted_address": "Chinchoti Anjur Phata Road, Kaman, Vasai-Virar, Vasai Taluka, Palghar, Maharashtra, 401208, India",
+    "confidence": 0.05338589532310976,
+    "source": "nominatim"
+  },
+  "95303ef5ee828408fb7ccf358ea2b785": {
+    "latitude": 18.9492575,
+    "longitude": 72.8279382,
+    "formatted_address": "Kalbadevi, C Ward, Zone 1, Mumbai City, Maharashtra, 400002, India",
+    "confidence": 0.33736466916818214,
+    "source": "nominatim"
+  },
+  "fb8fa0ae5a559a32f16dfef8bc0460d5": {
+    "latitude": 18.9584855,
+    "longitude": 72.8122522,
+    "formatted_address": "Gamdevi, D Ward, Zone 1, Mumbai City, Maharashtra, 400036, India",
+    "confidence": 0.14674266193636984,
+    "source": "nominatim"
+  },
+  "beaccf61bb34df7c50ad3d377fd7fa95": {
+    "latitude": 18.9687996,
+    "longitude": 72.8392247,
+    "formatted_address": "S B Dhody Marg (Nesbit Road), Mazgaon, E Ward, Zone 1, Mumbai City, Maharashtra, 200008, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "59a10718e1f6099c9413f53bf74ce5a2": {
+    "latitude": 19.0297792,
+    "longitude": 72.8440558,
+    "formatted_address": "G/N Ward, Zone 2, Mumbai City, Maharashtra, India",
+    "confidence": 0.13340932860303653,
+    "source": "nominatim"
+  },
+  "e2839ad8ad24c16f379cdd39d3dd78a2": {
+    "latitude": 19.2547846,
+    "longitude": 72.8549918,
+    "formatted_address": "R M Road, Kandarpada, Dahisar West, R/N Ward, Zone 4, Mumbai Suburban, Maharashtra, 400068, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "6eb690111eb41bd4cbde81ce19aab8f5": {
+    "latitude": 19.2486925,
+    "longitude": 72.8640593,
+    "formatted_address": "Dahisar East, R/N Ward, Zone 4, Mumbai Suburban, Maharashtra, 400068, India",
+    "confidence": 0.3692588589939114,
+    "source": "nominatim"
+  },
+  "50d185212276ac76b268116d3414f07b": {
+    "latitude": 19.2097189,
+    "longitude": 72.8759248,
+    "formatted_address": "Thakur Village, R/S Ward, Zone 4, Mumbai Suburban, Maharashtra, 400101, India",
+    "confidence": 0.09078915819201436,
+    "source": "nominatim"
+  },
+  "7887c0fbe09578aac452dec6701d771a": {
+    "latitude": 19.2005506,
+    "longitude": 72.87349,
+    "formatted_address": "Lokhandwala Marg, Thakur Village, R/S Ward, Zone 4, Mumbai Suburban, Maharashtra, 400101, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "5eda8267d6551ace5730c65fdc6e219d": {
+    "latitude": 19.153973,
+    "longitude": 72.962664,
+    "formatted_address": "Mulund - Airoli Link Road, Mulund East, T Ward, Zone 6, Mumbai, Mumbai Suburban, Maharashtra, 400081, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "a463957e58bec74e52ee0ee9eb0e66f9": {
+    "latitude": 19.1302521,
+    "longitude": 72.8213775,
+    "formatted_address": "Versova, Balasaheb Sawant Road, Seven Bungalows, Versova, K/W Ward, Zone 3, Mumbai, Mumbai Suburban, Maharashtra, 400061, India",
+    "confidence": 0.205345191009919,
+    "source": "nominatim"
+  },
+  "bd82aca4804a04810fb244af50169357": {
+    "latitude": 19.1462636,
+    "longitude": 72.9339461,
+    "formatted_address": "Bhandup West, S Ward, Zone 6, Mumbai, Mumbai Suburban, Maharashtra, 400078, India",
+    "confidence": 0.14674266193636984,
+    "source": "nominatim"
+  },
+  "3a6074a0bb279b837d2280ae687dae97": {
+    "latitude": 19.1149366,
+    "longitude": 72.8602425,
+    "formatted_address": "Mahakali Caves Road, Chakala, Andheri East, K/E Ward, Zone 3, Mumbai, Mumbai Suburban, Maharashtra, 400069, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "c52e55ce883fa1dc60f61850ad61a63e": {
+    "latitude": 19.1183759,
+    "longitude": 72.851928,
+    "formatted_address": "Mathuradas Vasanji Road, Andheri East, K/E Ward, Zone 3, Mumbai, Mumbai Suburban, Maharashtra, 400069, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "d296c5dfc2492302406b46b5a4206dad": {
+    "latitude": 19.108206,
+    "longitude": 72.8828404,
+    "formatted_address": "Saki Naka, K/E Ward, Zone 3, Mumbai, Mumbai Suburban, Maharashtra, 400072, India",
+    "confidence": 0.14674266193636984,
+    "source": "nominatim"
+  },
+  "deb518f65746742b45f0cb65728a3323": {
+    "latitude": 19.1243731,
+    "longitude": 72.8723547,
+    "formatted_address": "Krantiveer Lakhuji Salve Marg, MIDC, K/E Ward, Zone 3, Mumbai, Mumbai Suburban, Maharashtra, 400096, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "073d8196c7c26bd3d26b7ff42084ce35": {
+    "latitude": 19.1205119,
+    "longitude": 72.8646365,
+    "formatted_address": "MIDC, K/E Ward, Zone 3, Mumbai, Mumbai Suburban, Maharashtra, 400093, India",
+    "confidence": 0.14674266193636984,
+    "source": "nominatim"
+  },
+  "c29e2d5a4adb342065d58d69b15dc07b": {
+    "latitude": 19.1091482,
+    "longitude": 72.8945793,
+    "formatted_address": "Chandivali, L Ward, Zone 5, Mumbai, Mumbai Suburban, Maharashtra, 400072, India",
+    "confidence": 0.14674266193636984,
+    "source": "nominatim"
+  },
+  "e3b086f71f317211f199c81d46a49bb8": {
+    "latitude": 19.0669244,
+    "longitude": 72.9066681,
+    "formatted_address": "Chheda Nagar, M/W Ward, Zone 5, Mumbai, Mumbai Suburban, Maharashtra, 400012, India",
+    "confidence": 0.14674266193636984,
+    "source": "nominatim"
+  },
+  "fad7602ed19d92eb9ec088c30cedab44": {
+    "latitude": 19.0897439,
+    "longitude": 72.9048035,
+    "formatted_address": "Ghatkopar West, N Ward, Zone 6, Mumbai, Mumbai Suburban, Maharashtra, 400086, India",
+    "confidence": 0.14674266193636984,
+    "source": "nominatim"
+  },
+  "b3cafe73f3a8cad00171c5e6fcb2bf11": {
+    "latitude": 19.0686026,
+    "longitude": 72.876583,
+    "formatted_address": "Kurla West, L Ward, Zone 5, Mumbai, Mumbai Suburban, Maharashtra, 400024, India",
+    "confidence": 0.14674266193636984,
+    "source": "nominatim"
+  },
+  "cb58b324fb910260b1e356a235c6940e": {
+    "latitude": 19.097,
+    "longitude": 72.8945,
+    "formatted_address": "Asalpha, L Ward, Zone 5, Mumbai, Mumbai Suburban, Maharashtra, 400072, India",
+    "confidence": 0.10540294855860563,
+    "source": "nominatim"
+  },
+  "09776e56444347257c3241079737bb4e": {
+    "latitude": 19.0627036,
+    "longitude": 72.9063057,
+    "formatted_address": "Panjabi chull, Rahul Nagar, Chheda Nagar, M/W Ward, Zone 5, Mumbai, Mumbai Suburban, Maharashtra, 400012, India",
+    "confidence": 0.0400759952697032,
+    "source": "nominatim"
+  },
+  "857b9041ad5ca6aa1a16f47862fa66e4": {
+    "latitude": 19.1018763,
+    "longitude": 73.0040855,
+    "formatted_address": "Kopar Khairne, Navi Mumbai, Thane Taluka, Thane, Maharashtra, 400709, India",
+    "confidence": 0.14672373159380478,
+    "source": "nominatim"
+  },
+  "20d34d03f05d3408dd56a59fa9cd681d": {
+    "latitude": 19.1163797,
+    "longitude": 73.0069928,
+    "formatted_address": "Ghansoli, Ghansoli Station Road, Sector 6, Ghansoli, Navi Mumbai, Thane Taluka, Thane, Maharashtra, 400701, India",
+    "confidence": 0.2024340213354661,
+    "source": "nominatim"
+  },
+  "c0ea411a0fbbd608786c800fc8ae6ff2": {
+    "latitude": 19.1234789,
+    "longitude": 72.9981754,
+    "formatted_address": "Narayan Manoj Madvi Marg, Ghansoli Village, Ghansoli, Navi Mumbai, Thane Taluka, Thane, Maharashtra, 400701, India",
+    "confidence": 0.05339039826047147,
+    "source": "nominatim"
+  },
+  "52e4dc8e5a484258c10eade6c1c7d720": {
+    "latitude": 19.1585147,
+    "longitude": 72.9994019,
+    "formatted_address": "Airoli, Airoli Station Road, Airoli Sector 2, Airoli, Navi Mumbai, Thane Taluka, Thane, Maharashtra, 400708, India",
+    "confidence": 0.2584409411662214,
+    "source": "nominatim"
+  },
+  "61e468be7efa0487aa9497ff9d843d5f": {
+    "latitude": 19.0835561,
+    "longitude": 73.0170129,
+    "formatted_address": "Thane Belapur Road, Turbhe, Navi Mumbai, Thane Taluka, Thane, Maharashtra, 400703, India",
+    "confidence": 0.05339039826047147,
+    "source": "nominatim"
+  },
+  "56618c32f9931f9ad8ddb7abff9f0dce": {
+    "latitude": 19.0761648,
+    "longitude": 73.0176615,
+    "formatted_address": "Turbhe, Turbhe Station Road, Turbhe, Navi Mumbai, Thane Taluka, Thane, Maharashtra, 400703, India",
+    "confidence": 0.205345191009919,
+    "source": "nominatim"
+  },
+  "ff3083c4150acea95798f454707d7cb6": {
+    "latitude": 19.0568792,
+    "longitude": 73.015562,
+    "formatted_address": "Juinagar Station Road, Sanpada, Navi Mumbai, Thane Taluka, Thane, Maharashtra, 400056, India",
+    "confidence": 0.05339039826047147,
+    "source": "nominatim"
+  },
+  "73cbec16ace40e66babaeb5a2b96aee3": {
+    "latitude": 19.040054,
+    "longitude": 73.0175649,
+    "formatted_address": "Mata Amritanandamayi Marg, Nerul Village, Nerul West, Navi Mumbai, Thane Taluka, Thane, Maharashtra, 400706, India",
+    "confidence": 0.05339039826047147,
+    "source": "nominatim"
+  },
+  "59838bde44ea3671343a8f9ac75a22b5": {
+    "latitude": 19.0119109,
+    "longitude": 73.0175122,
+    "formatted_address": "Ramesh Sankarrow Hebbar Marg, Sector-50(W), Seawoods West, Navi Mumbai, Thane Taluka, Thane, Maharashtra, 400706, India",
+    "confidence": 0.05339039826047147,
+    "source": "nominatim"
+  },
+  "75c579b2904747f15bd1ac7c66d80a3c": {
+    "latitude": 19.2391602,
+    "longitude": 73.1293186,
+    "formatted_address": "Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, India",
+    "confidence": 0.18671705271992062,
+    "source": "nominatim"
+  },
+  "551de7598efe063c62b9a05760bdb391": {
+    "latitude": 19.2111814,
+    "longitude": 73.091129,
+    "formatted_address": "Dombivli East, Dombivli, Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, 421201, India",
+    "confidence": 0.1467170527199206,
+    "source": "nominatim"
+  },
+  "1bf857f4ea897cf435af909462d3224d": {
+    "latitude": 19.2221822,
+    "longitude": 73.0809274,
+    "formatted_address": "Dombivli West, Dombivli, Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, 421202, India",
+    "confidence": 0.1467170527199206,
+    "source": "nominatim"
+  },
+  "8bdcef0233af8b25e100f824c987ea45": {
+    "latitude": 19.2169499,
+    "longitude": 73.0943159,
+    "formatted_address": "Savarkar Road, Thakurli, Dombivli, Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, 421201, India",
+    "confidence": 0.053383719386587286,
+    "source": "nominatim"
+  },
+  "fe1ce8ef8ec7cc86af467ed8ae9b4724": {
+    "latitude": 19.2278526,
+    "longitude": 73.1322955,
+    "formatted_address": "Kalyan East, Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, 421306, India",
+    "confidence": 0.1467170527199206,
+    "source": "nominatim"
+  },
+  "e37e7aec71935cf4b63dda79b6d70b3c": {
+    "latitude": 19.2391602,
+    "longitude": 73.1293186,
+    "formatted_address": "Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, India",
+    "confidence": 0.18671705271992062,
+    "source": "nominatim"
+  },
+  "9caba73d4831a41dcf2ea37cd5058108": {
+    "latitude": 19.2391602,
+    "longitude": 73.1293186,
+    "formatted_address": "Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, India",
+    "confidence": 0.18671705271992062,
+    "source": "nominatim"
+  },
+  "3fad20a82c69d5c12da5d289bb084f34": {
+    "latitude": 19.2391602,
+    "longitude": 73.1293186,
+    "formatted_address": "Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, India",
+    "confidence": 0.18671705271992062,
+    "source": "nominatim"
+  },
+  "ef938a1b995f2738129a8bdc107b62f6": {
+    "latitude": 19.2391602,
+    "longitude": 73.1293186,
+    "formatted_address": "Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, India",
+    "confidence": 0.18671705271992062,
+    "source": "nominatim"
+  },
+  "40a1ef026bfd22ff31f880af5a4ee001": {
+    "latitude": 19.2592143,
+    "longitude": 73.1752609,
+    "formatted_address": "Veer Savarkar Marg, Ambivali, Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, 410209, India",
+    "confidence": 0.053383719386587286,
+    "source": "nominatim"
+  }
+}

@@ -841,6 +841,100 @@ async def upload_file(file: UploadFile):
 - [PostGIS Reference](https://postgis.net/docs/)
 - [MapTiler SDK Docs](https://docs.maptiler.com/sdk-js/)
 
+## 🌍 Geocoding System
+
+### Overview
+
+The system includes automatic geocoding to convert addresses to coordinates using Nominatim (OpenStreetMap's geocoding service).
+
+### Geocoding Workflow
+
+```
+CSV with addresses → Backend detects 'address' column → 
+Nominatim API calls → Coordinates added → Data stored with metadata
+```
+
+### Implementation Details
+
+**File**: `backend/main.py`
+
+```python
+def geocode_addresses(df):
+    """Geocode addresses using Nominatim"""
+    for idx, row in df.iterrows():
+        if pd.isna(row.get('latitude')) or pd.isna(row.get('longitude')):
+            address = row.get('address', '')
+            # Call Nominatim API
+            coords = geocode_address(address)
+            df.at[idx, 'latitude'] = coords['lat']
+            df.at[idx, 'longitude'] = coords['lon']
+            df.at[idx, 'geocode_confidence'] = coords['confidence']
+    return df
+```
+
+### Geocoding Metadata
+
+The system stores additional geocoding information:
+- `formatted_address`: Standardized address from geocoder
+- `geocode_confidence`: Confidence score (0-1)
+- `geocode_source`: Source of geocoding (e.g., "nominatim")
+
+## 📊 Excel Report Generation
+
+### Overview
+
+The system generates formatted Excel reports with delivery details, vehicle assignments, and color-coded delivery status.
+
+### Report Structure
+
+**File**: `backend/report_generator.py`
+
+The report includes:
+1. **Header Row**: Blue background with white bold text
+2. **Data Columns**:
+   - Vehicle ID, Shift Start/End
+   - Total Distance (km), Total Weight (kg)
+   - Parcel ID, Parcel Weight, Service Time
+   - Window End, Arrival Time
+   - Delivery Status, On-Time Status
+
+3. **Color Coding**:
+   - 🟢 Green: ON_TIME deliveries
+   - 🔴 Red: LATE deliveries
+   - 🟡 Yellow: IN_BUFFER (within 15min grace period)
+
+### Report Generation Flow
+
+```
+User clicks "Download Report" → 
+Backend queries station_node_map → 
+Calculate vehicle totals → 
+Create Excel workbook with openpyxl → 
+Apply formatting and styles → 
+Return .xlsx file to user
+```
+
+### Key Features
+
+- **Professional Formatting**: Styled headers, borders, alignment
+- **Auto Column Widths**: Optimized for readability
+- **Status Color Coding**: Visual indicators for delivery performance
+- **Vehicle Grouping**: All deliveries grouped by vehicle
+- **Comprehensive Data**: Includes all relevant delivery and vehicle information
+
+## 🐛 Recent Bug Fixes
+
+### Fixed Issues (February 2026)
+
+1. **SQL Syntax Errors**: Fixed f-string interpolation in warehouse node queries
+2. **Function Parameter Mismatches**: Corrected calculate_distance_matrix and solve_vrp function calls
+3. **Column Name Mismatches**: Updated SQL queries to use PostGIS geometry extraction (ST_X, ST_Y)
+4. **Data Structure Mismatches**: Aligned backend field names with frontend expectations (cost vs total_cost)
+5. **TypeScript Type Errors**: Updated VehicleRoute interface to match backend response
+6. **Report Generation**: Fixed non-existent table references in report queries
+7. **Route Geometry Display**: Corrected field name from 'routes' to 'route_geometry'
+8. **Parcel Marker Display**: Fixed array indices for coordinate extraction
+
 ---
 
 **For questions or clarifications, please refer to the main README.md or open an issue.**

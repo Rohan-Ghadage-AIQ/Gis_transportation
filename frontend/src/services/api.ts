@@ -32,7 +32,7 @@ export const apiService = {
 
     // Update data after editing
     async updateData(data: Record<string, any>[]): Promise<{ status: string; message: string }> {
-        const response = await api.post('/api/update-data', data);
+        const response = await api.post('/api/update-data', { data });  // Wrap in object
         return response.data;
     },
 

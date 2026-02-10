@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import pandas as pd
@@ -8,6 +8,7 @@ import io
 import os
 from dotenv import load_dotenv
 import json
+from datetime import datetime
 
 # Import database and solver modules
 from database import (
@@ -20,13 +21,13 @@ from database import (
     fetch_results_summary
 )
 from vrp_solver import solve_vrp
+from geocoding import batch_geocode
 
-# Load environment variables
 load_dotenv()
 
-app = FastAPI(title="Vehicle Routing API", version="1.0.0")
+app = FastAPI()
 
-# CORS Configuration
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:5173")],
@@ -35,24 +36,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Database connection
+conn = get_db_connection()
+
 # Global variables
-uploaded_data: Optional[pd.DataFrame] = None
-warehouse_config: Dict[str, float] = {
-    "latitude": 19.0725,
-    "longitude": 72.8724
+uploaded_data = None
+warehouse_config = {
+    "latitude": 19.0760,  # Mumbai default
+    "longitude": 72.8777
 }
 
-# Vehicle colors for map visualization
+# Vehicle colors for visualization
 VEHICLE_COLORS = [
-    "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A",
-    "#98D8C8", "#F7DC6F", "#BB8FCE", "#85C1E2"
+    "#FF6B6B",  # Red
+    "#4ECDC4",  # Teal
+    "#45B7D1",  # Blue
+    "#FFA07A",  # Light Salmon
+    "#98D8C8",  # Mint
+    "#F7DC6F",  # Yellow
+    "#BB8FCE",  # Purple
+    "#85C1E9",  # Sky Blue
+    "#F8B88B",  # Peach
+    "#ABEBC6"   # Light Green
 ]
 
 
-# Pydantic Models
-class HealthResponse(BaseModel):
-    status: str
-    message: str
+# Pydantic models
+class DataUpdate(BaseModel):
+    data: List[Dict[str, Any]]
 
 
 class WarehouseConfig(BaseModel):
@@ -65,81 +76,166 @@ class ComputeResponse(BaseModel):
     message: str
 
 
-# API Endpoints
-@app.get("/api/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint"""
-    return HealthResponse(
-        status="ok",
-        message="Vehicle Routing API is running"
-    )
+@app.get("/")
+async def root():
+    return {"message": "Vehicle Routing API is running"}
 
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     """
-    Upload CSV or Excel file containing delivery data.
-    Expected columns: id, latitude, longitude
-    Optional columns: parcel_weight, service_time, window_start, window_end
+    Upload CSV file with delivery locations.
+    Supports both address-based and coordinate-based formats.
     """
     global uploaded_data
     
     try:
-        # Read file content
-        content = await file.read()
-        
-        # Determine file type and parse
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(content))
-        elif file.filename.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(io.BytesIO(content))
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file format. Please upload CSV or Excel file."
-            )
+        # Read CSV file
+        contents = await file.read()
+        df = pd.read_csv(io.BytesIO(contents))
         
         # Validate required columns
-        required_columns = ['id', 'latitude', 'longitude']
-        missing_columns = [col for col in required_columns if col not in df.columns]
+        required_base_columns = ['id', 'parcel_weight', 'service_time']
+        missing_columns = [col for col in required_base_columns if col not in df.columns]
+        
         if missing_columns:
             raise HTTPException(
                 status_code=400,
                 detail=f"Missing required columns: {', '.join(missing_columns)}"
             )
         
-        # Store the dataframe globally
+        # Check if geocoding is needed
+        has_address = 'address' in df.columns
+        has_coordinates = 'latitude' in df.columns and 'longitude' in df.columns
+        
+        if not has_address and not has_coordinates:
+            raise HTTPException(
+                status_code=400,
+                detail="CSV must have either 'address' column OR 'latitude' and 'longitude' columns"
+            )
+        
+        # GEOCODING: Convert addresses to coordinates
+        if has_address and not has_coordinates:
+            print("\n" + "="*60)
+            print("GEOCODING ADDRESSES")
+            print("="*60)
+            
+            addresses = df['address'].tolist()
+            print(f"Total addresses to geocode: {len(addresses)}\n")
+            
+            # Batch geocode all addresses
+            geocoded_results = batch_geocode(addresses)
+            
+            # Add geocoded coordinates to dataframe
+            df['latitude'] = [r.get('latitude') for r in geocoded_results]
+            df['longitude'] = [r.get('longitude') for r in geocoded_results]
+            df['formatted_address'] = [r.get('formatted_address', '') for r in geocoded_results]
+            df['geocode_confidence'] = [r.get('confidence', 0.0) for r in geocoded_results]
+            df['geocode_source'] = [r.get('source', 'none') for r in geocoded_results]
+            
+            # Check for failed geocodes
+            failed = df[df['latitude'].isna()]
+            if len(failed) > 0:
+                failed_count = len(failed)
+                total_count = len(addresses)
+                success_rate = ((total_count - failed_count) / total_count) * 100
+                
+                failed_addresses = failed[['id', 'address']].to_dict(orient='records')
+                print(f"\n⚠️  WARNING: {failed_count} addresses failed to geocode ({success_rate:.1f}% success rate)")
+                
+                # If more than 20% failed, reject the upload
+                if success_rate < 80:
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": "geocoding_failed",
+                            "message": f"{failed_count} addresses could not be geocoded ({success_rate:.1f}% success). Please fix addresses and retry.",
+                            "failed_addresses": failed_addresses,
+                            "total_failed": failed_count,
+                            "total_addresses": total_count
+                        }
+                    )
+                else:
+                    # Allow upload but exclude failed addresses
+                    print(f"✓ Proceeding with {total_count - failed_count} successfully geocoded addresses")
+                    df = df.dropna(subset=['latitude', 'longitude'])
+            
+            print(f"\n✓ Successfully geocoded {len(df)} addresses!")
+            print("="*60 + "\n")
+        
+        # Store in global variable
         uploaded_data = df
         
-        # Convert to JSON for frontend
-        data_json = df.to_dict(orient='records')
-        columns = df.columns.tolist()
+        # Prepare response data - exclude technical/geocoding columns
+        # Users don't need to see: latitude, longitude, window_start, formatted_address, geocode_confidence, geocode_source
+        # window_end is kept visible as it shows the requested delivery time
+        # These are used internally by the VRP solver but not shown in UI
+        exclude_columns = ['latitude', 'longitude', 'window_start', 'formatted_address', 'geocode_confidence', 'geocode_source']
+        display_columns = [col for col in df.columns if col not in exclude_columns]
+        display_data = df[display_columns].to_dict(orient='records')
         
         return JSONResponse(content={
             "status": "success",
-            "message": f"File '{file.filename}' uploaded successfully",
-            "data": data_json,
-            "columns": columns,
-            "row_count": len(df)
+            "data": display_data,
+            "columns": display_columns,
+            "row_count": len(df),
+            "geocoded": has_address and not has_coordinates,
+            "message": f"Successfully uploaded {len(df)} records" + 
+                      (f" (geocoded from addresses)" if (has_address and not has_coordinates) else "")
         })
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 
 @app.post("/api/update-data")
-async def update_data(data: List[Dict[str, Any]]):
-    """
-    Update the uploaded data with edited values from frontend.
-    """
+async def update_data(update: DataUpdate):
+    """Update the uploaded data"""
     global uploaded_data
     
     try:
-        if uploaded_data is None:
-            raise HTTPException(status_code=400, detail="No data uploaded yet")
+        print(f"Received update request with {len(update.data)} rows")
         
-        # Convert the updated data back to DataFrame
-        uploaded_data = pd.DataFrame(data)
+        # Convert updated data to DataFrame
+        updated_df = pd.DataFrame(update.data)
+        
+        print(f"Updated data columns: {list(updated_df.columns)}")
+        print(f"Original data columns: {list(uploaded_data.columns) if uploaded_data is not None else 'None'}")
+        
+        # Preserve internal columns (latitude, longitude, window_start, etc.) from original data
+        # Only update user-editable columns
+        if uploaded_data is not None and len(uploaded_data) > 0:
+            # Columns that should be preserved from original data
+            preserve_columns = ['latitude', 'longitude', 'window_start', 'formatted_address', 
+                              'geocode_confidence', 'geocode_source']
+            
+            # Start with updated data
+            merged_df = updated_df.copy()
+            
+            # Add back preserved columns from original data
+            for col in preserve_columns:
+                if col in uploaded_data.columns:
+                    merged_df[col] = uploaded_data[col]
+            
+            uploaded_data = merged_df
+        else:
+            # If original data is None (e.g., after backend restart), 
+            # the updated data should already contain all necessary columns
+            # This happens when user uploads a file and the data is sent back
+            uploaded_data = updated_df
+            
+            # Check if required columns are present
+            required_cols = ['latitude', 'longitude']
+            missing_cols = [col for col in required_cols if col not in uploaded_data.columns]
+            if missing_cols:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Missing required columns: {missing_cols}. Please re-upload your file."
+                )
+        
+        print(f"Successfully updated data: {len(uploaded_data)} rows, columns: {list(uploaded_data.columns)}")
         
         return JSONResponse(content={
             "status": "success",
@@ -147,7 +243,11 @@ async def update_data(data: List[Dict[str, Any]]):
             "row_count": len(uploaded_data)
         })
         
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"Error updating data: {str(e)}")
+        print(f"Error type: {type(e)}")
         raise HTTPException(status_code=500, detail=f"Error updating data: {str(e)}")
 
 
@@ -187,125 +287,111 @@ async def compute_routes():
     2. Insert uploaded data
     3. Randomize attributes (service time, time windows, weights)
     4. Calculate distance matrix via pgRouting
-    5. Run VRP solver with OR-Tools
-    6. Save route geometries to database
+    5. Solve VRP using OR-Tools
     """
-    global uploaded_data
+    global uploaded_data, warehouse_config
+    
+    if uploaded_data is None:
+        raise HTTPException(status_code=400, detail="No data uploaded. Please upload a CSV file first.")
     
     try:
-        if uploaded_data is None:
-            raise HTTPException(status_code=400, detail="No data uploaded yet")
-        
-        conn = get_db_connection()
+        print("\n" + "="*60)
+        print("STARTING VRP COMPUTATION")
+        print("="*60)
+        print(f"Uploaded data shape: {uploaded_data.shape}")
+        print(f"Uploaded data columns: {list(uploaded_data.columns)}")
         
         # Step 1: Setup table
+        print("\n[Step 1/5] Setting up station_node_map table...")
         setup_station_node_map_table(conn)
+        print("✓ Table setup complete")
         
         # Step 2: Insert stations
-        insert_stations_from_dataframe(
-            conn, 
-            uploaded_data,
-            warehouse_config["longitude"],
-            warehouse_config["latitude"]
-        )
+        print("\n[Step 2/5] Inserting stations from dataframe...")
+        insert_stations_from_dataframe(conn, uploaded_data)
+        print("✓ Stations inserted")
         
-        # Step 3: Randomize attributes
-        randomize_station_attributes(conn)
+        # Step 3: Randomize attributes (optional, can be removed if data is already complete)
+        # randomize_station_attributes(conn)
         
         # Step 4: Calculate distance matrix
-        calculate_distance_matrix(
-            conn,
-            warehouse_config["longitude"],
-            warehouse_config["latitude"]
-        )
+        print("\n[Step 3/5] Calculating distance matrix via pgRouting...")
+        calculate_distance_matrix(conn, warehouse_config["longitude"], warehouse_config["latitude"])
+        print("✓ Distance matrix calculated")
         
-        conn.close()
+        # Step 5: Solve VRP
+        print("\n[Step 4/5] Solving VRP with OR-Tools...")
+        solve_vrp(warehouse_config["longitude"], warehouse_config["latitude"])
+        print("✓ VRP solved")
         
-        # Step 5: Run VRP solver
-        solver_result = solve_vrp(
-            warehouse_config["longitude"],
-            warehouse_config["latitude"]
-        )
-        
-        if not solver_result.get("success"):
-            raise HTTPException(
-                status_code=500,
-                detail=solver_result.get("error", "Solver failed")
-            )
+        print("\n" + "="*60)
+        print("VRP COMPUTATION COMPLETED SUCCESSFULLY")
+        print("="*60 + "\n")
         
         return ComputeResponse(
             status="success",
-            message=f"Route optimization completed. {solver_result['total_vehicles_used']} vehicles used for {solver_result['total_deliveries']} deliveries."
+            message="Route optimization completed successfully"
         )
         
     except Exception as e:
+        print(f"\n❌ ERROR during computation: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        print(f"Traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error during computation: {str(e)}")
 
 
 @app.get("/api/results")
 async def get_results():
     """
-    Get the computed route results including vehicle routes, parcels, and statistics.
-    Returns GeoJSON route geometries with actual road paths.
+    Retrieve the computed VRP results including:
+    - Vehicle routes with geometries
+    - Summary statistics
+    - Parcel assignments
     """
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Fetch route geometries as GeoJSON
-        route_geojson = fetch_route_geometries_geojson(conn)
-        
-        # Fetch results summary
+        # Fetch summary
         summary_data = fetch_results_summary(conn)
         
-        # Fetch station assignments with details
-        cur.execute("""
-            SELECT station_id, nearest_node_id, parcel_weight, vehicle_id,
-                   ST_X(geom) as longitude, ST_Y(geom) as latitude,
+        if not summary_data:
+            raise HTTPException(status_code=404, detail="No results found. Please run computation first.")
+        
+        # Fetch route geometries
+        route_geojson = fetch_route_geometries_geojson(conn)
+        
+        # Fetch station assignments
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT station_id, ST_X(geom) as longitude, ST_Y(geom) as latitude, vehicle_id, parcel_weight, 
                    arrival_time, delivery_status
             FROM vector.station_node_map
             WHERE vehicle_id IS NOT NULL
             ORDER BY vehicle_id, station_id
         """)
-        stations_data = cur.fetchall()
+        stations_data = cursor.fetchall()
         
-        # Get undelivered parcels (stations without vehicle assignment) BEFORE closing connection
-        cur.execute("""
+        # Fetch undelivered parcels
+        cursor.execute("""
             SELECT station_id, ST_X(geom) as longitude, ST_Y(geom) as latitude
             FROM vector.station_node_map
             WHERE vehicle_id IS NULL
         """)
-        undelivered_data = cur.fetchall()
+        undelivered_data = cursor.fetchall()
+        cursor.close()
         
-        conn.close()
-        
-        # Build vehicles array with complete data
+        # Build response
         vehicles = []
         parcels = []
         total_cost = 0
         
-        # Vehicle colors (10 distinct colors)
-        VEHICLE_COLORS = [
-            "#FF6B6B",  # Red
-            "#4ECDC4",  # Teal
-            "#45B7D1",  # Blue
-            "#FFA07A",  # Light Salmon
-            "#98D8C8",  # Mint
-            "#F7DC6F",  # Yellow
-            "#BB8FCE",  # Purple
-            "#85C1E2",  # Sky Blue
-            "#F8B739",  # Orange
-            "#52C77A"   # Green
-        ]
-        
-        # Vehicle time windows (10 vehicles)
-        vehicle_times = [
-            ("09:00 AM", 660),  # V1: 9 AM - 6 PM
-            ("09:00 AM", 660),  # V2: 9 AM - 6 PM
-            ("07:00 AM", 480),  # V3: 7 AM - 3 PM
-            ("07:00 AM", 660),  # V4: 7 AM - 6 PM
-            ("09:00 AM", 600),  # V5: 9 AM - 5 PM
-            ("08:00 AM", 660),  # V6: 8 AM - 6 PM
+        # Vehicle shift times (10 vehicles)
+        vehicle_shifts = [
+            ("06:00 AM", 720),  # V1: 6 AM - 6 PM
+            ("07:00 AM", 840),  # V2: 7 AM - 9 PM
+            ("06:00 AM", 780),  # V3: 6 AM - 8 PM
+            ("08:00 AM", 720),  # V4: 8 AM - 8 PM
+            ("07:00 AM", 720),  # V5: 7 AM - 7 PM
+            ("06:00 AM", 660),  # V6: 6 AM - 6 PM
             ("08:00 AM", 840),  # V7: 8 AM - 9 PM
             ("07:00 AM", 780),  # V8: 7 AM - 8 PM
             ("07:00 AM", 720),  # V9: 7 AM - 7 PM
@@ -326,10 +412,10 @@ async def get_results():
             vehicle_stations = [
                 {
                     "station_id": str(s[0]),
-                    "lat": float(s[5]),
-                    "lon": float(s[4]),
-                    "arrival_time": s[6] if len(s) > 6 and s[6] else "N/A",  # arrival_time from DB
-                    "status": s[7] if len(s) > 7 and s[7] else "UNKNOWN"      # delivery_status from DB
+                    "lat": float(s[2]),  # latitude is column 2
+                    "lon": float(s[1]),  # longitude is column 1
+                    "arrival_time": s[5] if len(s) > 5 and s[5] else "N/A",  # arrival_time
+                    "status": s[6] if len(s) > 6 and s[6] else "UNKNOWN"      # delivery_status
                 }
                 for s in stations_data if s[3] == vehicle_id
             ]
@@ -344,8 +430,8 @@ async def get_results():
                 if s[3] == vehicle_id:
                     parcels.append({
                         "station_id": str(s[0]),
-                        "lat": float(s[5]),
-                        "lon": float(s[4]),
+                        "lat": float(s[2]),  # latitude is column 2
+                        "lon": float(s[1]),  # longitude is column 1
                         "vehicle_id": vehicle_id,
                         "color": VEHICLE_COLORS[vehicle_id - 1] if vehicle_id <= len(VEHICLE_COLORS) else "#888888"
                     })
@@ -357,35 +443,41 @@ async def get_results():
             
             # Get route geometry for this vehicle
             vehicle_routes = [
-                f for f in route_geojson["features"] 
-                if f["properties"]["vehicle_id"] == vehicle_id
+                r for r in route_geojson["features"] 
+                if r["properties"]["vehicle_id"] == vehicle_id
             ]
             
-            # Build vehicle object
-            clock_in, max_duration = vehicle_times[vehicle_id - 1]
+            # Get shift times
+            clock_in, work_mins = vehicle_shifts[vehicle_id - 1]
             
-            # Calculate clock-out time
-            work_mins = int(distance_km * 2)  # Rough estimate: 2 mins per km
-            clock_in_mins = int(clock_in.split(":")[0]) * 60 + int(clock_in.split(":")[1].split()[0])
-            if "PM" in clock_in and "12" not in clock_in:
-                clock_in_mins += 720
+            # Calculate clock out time
+            clock_in_hour = int(clock_in.split(":")[0])
+            clock_in_min = int(clock_in.split(":")[1].split()[0])
+            clock_in_period = clock_in.split()[1]
             
-            clock_out_mins = clock_in_mins + work_mins
-            clock_out_hours = (clock_out_mins // 60) % 24
-            clock_out_min = clock_out_mins % 60
-            am_pm = "AM" if clock_out_hours < 12 else "PM"
-            display_hour = clock_out_hours if clock_out_hours <= 12 else clock_out_hours - 12
+            # Convert to 24-hour
+            if clock_in_period == "PM" and clock_in_hour != 12:
+                clock_in_hour += 12
+            elif clock_in_period == "AM" and clock_in_hour == 12:
+                clock_in_hour = 0
+            
+            total_mins = clock_in_hour * 60 + clock_in_min + work_mins
+            clock_out_hour = (total_mins // 60) % 24
+            clock_out_min = total_mins % 60
+            clock_out_period = "AM" if clock_out_hour < 12 else "PM"
+            display_hour = clock_out_hour if clock_out_hour <= 12 else clock_out_hour - 12
             if display_hour == 0:
                 display_hour = 12
-            clock_out = f"{display_hour:02d}:{clock_out_min:02d} {am_pm}"
+            clock_out = f"{display_hour:02d}:{clock_out_min:02d} {clock_out_period}"
             
             vehicles.append({
                 "vehicle_id": vehicle_id,
+                "total_distance": float(vehicle["total_km"]),
+                "total_weight": int(vehicle["total_weight_kg"]),
+                "total_deliveries": int(vehicle["parcel_count"]),  # Use parcel_count from DB
+                "cost": round(cost, 2),
                 "stations": vehicle_stations,
-                "route_geometry": vehicle_routes,
-                "total_distance": distance_km,
-                "total_cost": cost,
-                "weight_carried": int(vehicle["total_weight_kg"]),
+                "route_geometry": vehicle_routes,  # Changed from 'routes' to match frontend
                 "capacity": vehicle_capacities[vehicle_id - 1],
                 "utilization": round((int(vehicle["total_weight_kg"]) / vehicle_capacities[vehicle_id - 1]) * 100, 1),
                 "work_duration": work_mins,
@@ -422,7 +514,36 @@ async def get_results():
         })
         
     except Exception as e:
+        conn.rollback()  # Rollback failed transaction
+        print(f"\n❌ ERROR retrieving results: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        print(f"Traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error retrieving results: {str(e)}")
+
+
+@app.get("/api/download-report")
+async def download_report():
+    """
+    Generate and download comprehensive delivery report as Excel file
+    """
+    try:
+        from report_generator import generate_delivery_report
+        
+        # Generate report (returns bytes)
+        excel_content = generate_delivery_report(conn)
+        
+        # Create streaming response
+        return StreamingResponse(
+            iter([excel_content]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename=delivery_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            }
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating report: {str(e)}")
 
 
 if __name__ == "__main__":
@@ -433,4 +554,3 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", 8000)),
         reload=True
     )
-

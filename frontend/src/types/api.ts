@@ -17,8 +17,8 @@ export interface VehicleRoute {
     stations: Station[];
     route_geometry: RouteGeometry[];
     total_distance: number;
-    total_cost: number;
-    weight_carried: number;
+    cost: number;  // Changed from total_cost
+    total_weight: number;  // Changed from weight_carried
     capacity: number;
     utilization: number;
     work_duration: number;

@@ -146,19 +146,19 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ results }) => {
                                 <div>
                                     <p className="text-gray-400 text-sm">Distance</p>
                                     <p className="text-white font-semibold">
-                                        {vehicle.total_distance.toFixed(2)} km
+                                        {vehicle.total_distance?.toFixed(2) || '0.00'} km
                                     </p>
                                 </div>
                                 <div>
                                     <p className="text-gray-400 text-sm">Cost</p>
                                     <p className="text-white font-semibold">
-                                        ₹{vehicle.total_cost.toFixed(2)}
+                                        ₹{vehicle.cost?.toFixed(2) || '0.00'}
                                     </p>
                                 </div>
                                 <div>
                                     <p className="text-gray-400 text-sm">Weight</p>
                                     <p className="text-white font-semibold">
-                                        {vehicle.weight_carried}kg / {vehicle.capacity}kg
+                                        {vehicle.total_weight || 0}kg / {vehicle.capacity || 0}kg
                                     </p>
                                 </div>
                                 <div>

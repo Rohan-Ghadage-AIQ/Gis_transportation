@@ -51,7 +51,16 @@ export const UploadPage: React.FC = () => {
             setColumns(response.columns);
             setError('');
         } catch (err: any) {
-            setError(err.response?.data?.detail || 'Failed to upload file');
+            // Ensure error is always a string
+            const errorDetail = err.response?.data?.detail;
+            if (typeof errorDetail === 'string') {
+                setError(errorDetail);
+            } else if (typeof errorDetail === 'object') {
+                // Handle Pydantic validation errors
+                setError(JSON.stringify(errorDetail, null, 2));
+            } else {
+                setError('Failed to upload file');
+            }
             setUploadedData([]);
             setColumns([]);
         } finally {
@@ -91,7 +100,16 @@ export const UploadPage: React.FC = () => {
             // Navigate to results page
             navigate('/results');
         } catch (err: any) {
-            setError(err.response?.data?.detail || 'Failed to compute routes');
+            // Ensure error is always a string
+            const errorDetail = err.response?.data?.detail;
+            if (typeof errorDetail === 'string') {
+                setError(errorDetail);
+            } else if (typeof errorDetail === 'object') {
+                // Handle Pydantic validation errors
+                setError(JSON.stringify(errorDetail, null, 2));
+            } else {
+                setError('Failed to compute routes');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -120,8 +138,8 @@ export const UploadPage: React.FC = () => {
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                         className={`border-2 border-dashed rounded-lg p-12 text-center transition-all ${isDragging
-                                ? 'border-blue-500 bg-blue-500/10'
-                                : 'border-gray-600 hover:border-gray-500'
+                            ? 'border-blue-500 bg-blue-500/10'
+                            : 'border-gray-600 hover:border-gray-500'
                             }`}
                     >
                         <div className="flex flex-col items-center">

@@ -78,25 +78,49 @@ export const ResultsPage: React.FC = () => {
                         {results.summary.total_fleets} vehicles · {results.summary.total_parcels} deliveries
                     </p>
                 </div>
-                <button
-                    onClick={() => navigate('/')}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors flex items-center"
-                >
-                    <svg
-                        className="w-5 h-5 mr-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => {
+                            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+                            window.open(`${API_URL}/api/download-report`, '_blank');
+                        }}
+                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors flex items-center"
                     >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                        />
-                    </svg>
-                    New Upload
-                </button>
+                        <svg
+                            className="w-5 h-5 mr-2"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                            />
+                        </svg>
+                        Download Report
+                    </button>
+                    <button
+                        onClick={() => navigate('/')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors flex items-center"
+                    >
+                        <svg
+                            className="w-5 h-5 mr-2"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                            />
+                        </svg>
+                        New Upload
+                    </button>
+                </div>
             </div>
 
             {/* Main Content - Split View */}

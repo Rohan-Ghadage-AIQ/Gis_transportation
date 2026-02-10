@@ -37,12 +37,13 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 
 ### Key Capabilities
 
-- Upload delivery data via CSV/Excel
+- Upload delivery data via CSV/Excel with automatic geocoding
 - Edit parcel details (weight, time windows, service time)
 - Configure warehouse location
 - Compute optimal routes with capacity and time constraints
 - View routes on interactive map with actual road geometries
 - Track vehicle utilization, costs, and schedules
+- Download formatted Excel reports with delivery details
 - Identify undelivered parcels
 
 ## ✨ Features
@@ -51,6 +52,7 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 
 #### 1. Upload & Data Management
 - **Drag-and-Drop Upload**: Modern file upload interface supporting CSV and Excel formats
+- **Automatic Geocoding**: Converts addresses to coordinates using Nominatim (OpenStreetMap)
 - **Editable Data Table**: Interactive table with inline editing for all delivery parameters
 - **Data Validation**: Real-time validation of uploaded data
 - **Warehouse Configuration**: Set custom warehouse location (default: Mumbai)
@@ -72,16 +74,18 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
   - Work duration
   - Complete stop list with arrival times and status
 - **Undelivered Parcels**: Separate section highlighting unassigned deliveries
+- **Excel Report Download**: Formatted Excel file with color-coded delivery status
 
 ### 🔧 Backend Features
 
 #### API Endpoints
 - `GET /api/health` - Health check
-- `POST /api/upload` - Upload CSV/Excel delivery data
+- `POST /api/upload` - Upload CSV/Excel delivery data with automatic geocoding
 - `POST /api/update-data` - Update edited delivery data
 - `POST /api/warehouse` - Configure warehouse location
 - `POST /api/compute` - Trigger route optimization
 - `GET /api/results` - Retrieve optimized routes and statistics
+- `GET /api/download-report` - Download Excel report with delivery details
 
 #### Optimization Engine
 - **OR-Tools VRP Solver**: Capacity and time window constraints
@@ -110,6 +114,7 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 | Pandas | 2.2.3 | Data processing |
 | psycopg2-binary | 2.9.10 | PostgreSQL adapter |
 | OR-Tools | 9.11.4210 | Route optimization |
+| openpyxl | 3.1.5 | Excel file generation |
 | python-dotenv | 1.0.1 | Environment management |
 
 ### Database
@@ -124,6 +129,7 @@ GisTransportation4/
 │   ├── main.py                 # FastAPI application
 │   ├── database.py             # PostgreSQL operations
 │   ├── vrp_solver.py           # OR-Tools VRP solver
+│   ├── report_generator.py     # Excel report generation
 │   ├── requirements.txt        # Python dependencies
 │   ├── .env                    # Environment variables (not in git)
 │   └── .gitignore
