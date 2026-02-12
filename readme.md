@@ -230,6 +230,19 @@ Create `frontend/.env` file:
 VITE_API_URL=http://localhost:8000
 VITE_MAPTILER_KEY=your_maptiler_api_key
 ```
+### OR
+### Docker Setup
+Make the .env files in the backend and frontend folders
+Go to GisTransportation4 folder
+
+```bash
+cd GisTransportation4
+```
+
+```bash
+docker-compose up --build
+```
+
 
 ### Database Setup
 

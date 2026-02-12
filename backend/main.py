@@ -28,9 +28,16 @@ load_dotenv()
 app = FastAPI()
 
 # CORS configuration
+origins = [
+    os.getenv("FRONTEND_URL", "http://localhost"), # The Docker port
+    "http://localhost:80",
+    "http://localhost:5173",                       # Default Vite dev port
+    "*",                                           # Optional: Keep this only if you want total access
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:5173")],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

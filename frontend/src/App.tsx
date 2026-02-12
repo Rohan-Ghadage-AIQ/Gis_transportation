@@ -1,4 +1,5 @@
-import React from 'react';
+
+import '@maptiler/sdk/dist/maptiler-sdk.css';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { UploadPage } from './pages/UploadPage';
 import { ResultsPage } from './pages/ResultsPage';

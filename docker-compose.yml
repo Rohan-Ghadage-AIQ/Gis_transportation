@@ -1,0 +1,22 @@
+services:
+  backend:
+    image: rohanghadage/gistransportation-backend:latest
+    container_name: gis_backend
+    ports:
+      - "8000:8000"
+    # Points to the env file inside the backend subfolder
+    env_file:
+      - ./backend/.env
+    restart: always
+
+  frontend:
+    image: rohanghadage/gistransportation-frontend:latest
+    container_name: gis_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    # Points to the env file inside the frontend subfolder
+    env_file:
+      - ./frontend/.env
+    restart: always
