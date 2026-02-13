@@ -171,7 +171,7 @@ GisTransportation4/
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Rohan-Ghadage-AIQ/Gis_transportation.git
 cd GisTransportation4
 ```
 
@@ -232,7 +232,7 @@ VITE_MAPTILER_KEY=your_maptiler_api_key
 ```
 ### OR
 ### Docker Setup
-Make the .env files in the backend and frontend folders
+Make the .env files in the backend and frontend folders.
 Go to GisTransportation4 folder
 
 ```bash
