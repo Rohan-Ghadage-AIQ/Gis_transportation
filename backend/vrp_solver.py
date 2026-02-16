@@ -39,6 +39,16 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     node_service_times = [0] + [s['service_time'] for s in stations]
     node_windows = [(0, 480)] + [(s['window_start'], s['window_end']) for s in stations]
     
+    # CRITICAL VALIDATION: Ensure no NULL nodes in system
+    if None in nodes_in_system:
+        null_indices = [i for i, node in enumerate(nodes_in_system) if node is None]
+        null_stations = [station_ids[i] for i in null_indices if i > 0]
+        raise ValueError(
+            f"CRITICAL ERROR: {len(null_indices)} parcels have NULL nearest_node_id!\n"
+            f"Stations: {null_stations[:5]}...\n"
+            f"These parcels could not be snapped to the road network. Check database."
+        )
+    
     size = len(nodes_in_system)
     node_to_idx = {node: i for i, node in enumerate(nodes_in_system)}
     idx_to_node = {i: node for node, i in node_to_idx.items()}
@@ -100,7 +110,7 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         time_dimension.CumulVar(index).SetRange(0, 840)
         preferred_time = max(0, deadline - 60)
         time_dimension.SetCumulVarSoftUpperBound(index, preferred_time, 5000)
-        time_dimension.SetCumulVarSoftUpperBound(index, deadline, 1000000)
+        time_dimension.SetCumulVarSoftUpperBound(index, deadline, 100000000)
     
     # Vehicle-specific time constraints
     for v in range(num_vehicles):
@@ -117,7 +127,7 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     # Penalty for dropping parcels - EXTREMELY HIGH to ensure all parcels are delivered
     # This makes it almost impossible for the solver to drop a parcel
     for i in range(1, size):
-        routing.AddDisjunction([manager.NodeToIndex(i)], 100000000)  # 10x higher penalty!
+        routing.AddDisjunction([manager.NodeToIndex(i)], 1000000)
     
     # Cost callback per vehicle
     def create_cost_callback(v_idx):
@@ -285,6 +295,30 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         })
     
     conn.commit()
+    
+    # ========================================
+    # RECORD UNASSIGNED PARCELS
+    # ========================================
+    # Find parcels that were NOT assigned to any vehicle
+    cur.execute("""
+        INSERT INTO vector.unassigned_parcels (station_id, reason, latitude, longitude, parcel_weight, window_end)
+        SELECT 
+            station_id,
+            'Could not fit into any vehicle route (capacity/time/distance constraints)',
+            ST_Y(geom) as latitude,
+            ST_X(geom) as longitude,
+            parcel_weight,
+            window_end
+        FROM vector.station_node_map
+        WHERE vehicle_id IS NULL
+        ON CONFLICT (station_id) DO UPDATE SET reason = EXCLUDED.reason
+    """)
+    unassigned_count = cur.rowcount
+    if unassigned_count > 0:
+        print(f"\n⚠️  WARNING: {unassigned_count} parcels could not be assigned to any vehicle!")
+        print(f"These parcels exceeded capacity/time/distance constraints.\n")
+    conn.commit()
+    
     cur.close()
     conn.close()
     

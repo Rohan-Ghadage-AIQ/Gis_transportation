@@ -63,6 +63,10 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 - **Road-Based Paths**: Actual road geometries from pgRouting (not straight lines)
 - **Direction Arrows**: Visual indicators showing route direction
 - **Enhanced Visibility**: Darker, thicker route lines for better clarity
+- **🆕 Selective Route Visibility**: Toggle individual vehicle routes with checkboxes
+  - Click checkboxes in legend to show/hide specific routes
+  - "Show All" / "Hide All" buttons for bulk control
+  - Synchronized route and marker visibility
 
 #### 3. Statistics Dashboard
 - **Summary Cards**: Total distance, cost, parcels, and active fleets
@@ -75,6 +79,11 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
   - Complete stop list with arrival times and status
 - **Undelivered Parcels**: Separate section highlighting unassigned deliveries
 - **Excel Report Download**: Formatted Excel file with color-coded delivery status
+- **🆕 Unassigned Parcels Sheet**: Dedicated Excel sheet showing:
+  - Parcels that couldn't be assigned to any vehicle
+  - Detailed reasons for non-assignment
+  - Parcel location and weight information
+  - Red-themed header for easy identification
 
 ### 🔧 Backend Features
 

@@ -30,7 +30,19 @@ def setup_station_node_map_table(conn):
             window_start INT DEFAULT 0,
             window_end INT DEFAULT 480,
             vehicle_id INTEGER,
+            arrival_time TEXT,
+            delivery_status TEXT,
             geom geometry(Point, 4326)
+        );
+        
+        CREATE TABLE IF NOT EXISTS vector.unassigned_parcels (
+            station_id VARCHAR PRIMARY KEY,
+            reason VARCHAR NOT NULL,
+            latitude DOUBLE PRECISION,
+            longitude DOUBLE PRECISION,
+            parcel_weight INTEGER,
+            window_end INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
     conn.commit()
@@ -49,17 +61,25 @@ def insert_stations_from_dataframe(conn, df: pd.DataFrame, warehouse_lon: float 
     
     # Pre-fetch all nodes in main component (component 11) - do this ONCE
     # This is much faster than calling pgr_connectedComponents for each station
+    # Use OR condition to ensure temp table is populated, GROUP BY ensures uniqueness
     cur.execute("""
         CREATE TEMP TABLE IF NOT EXISTS temp_main_component_nodes AS
-        SELECT DISTINCT m.node, r.geom
+        SELECT m.node, r.geom
         FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m
         JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node)
-        WHERE m.component = 11;
+        WHERE m.component = 11
+        GROUP BY m.node, r.geom;
         
         CREATE INDEX IF NOT EXISTS idx_temp_main_nodes_geom ON temp_main_component_nodes USING GIST (geom);
     """)
     
+    # DEBUG: Check if temp table has nodes
+    cur.execute("SELECT COUNT(*) FROM temp_main_component_nodes;")
+    node_count = cur.fetchone()[0]
+    print(f"DEBUG: Temp table has {node_count} nodes from component 11")
+    
     # Insert stations with nearest node snapping (using pre-fetched nodes)
+    inserted_count = 0
     for _, row in df.iterrows():
         station_id = str(row['id'])
         lat = float(row['latitude'])
@@ -70,17 +90,52 @@ def insert_stations_from_dataframe(conn, df: pd.DataFrame, warehouse_lon: float 
         window_end = int(row.get('window_end', 480))
         
         # Use pre-fetched main component nodes for faster lookups
-        cur.execute("""
-            INSERT INTO vector.station_node_map (station_id, nearest_node_id, parcel_weight, service_time, window_start, window_end, geom)
-            SELECT 
-                %s,
-                (SELECT node 
-                 FROM temp_main_component_nodes
-                 ORDER BY geom <-> ST_SetSRID(ST_Point(%s, %s), 4326) 
-                 LIMIT 1),
-                %s, %s, %s, %s,
-                ST_SetSRID(ST_Point(%s, %s), 4326)
-        """, (station_id, lon, lat, weight, service_time, window_start, window_end, lon, lat))
+        # FALLBACK CHAIN: temp_table → component_11_nearest → warehouse_node
+        try:
+            cur.execute("""
+                INSERT INTO vector.station_node_map (station_id, nearest_node_id, parcel_weight, service_time, window_start, window_end, geom)
+                SELECT 
+                    %s,
+                    COALESCE(
+                        (SELECT node 
+                         FROM temp_main_component_nodes
+                         ORDER BY geom <-> ST_SetSRID(ST_Point(%s, %s), 4326) 
+                         LIMIT 1),
+                        (SELECT m.node 
+                         FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m
+                         JOIN vector.road_maharashtra r ON r.source = m.node
+                         WHERE m.component = 11
+                         ORDER BY r.geom <-> ST_SetSRID(ST_Point(%s, %s), 4326)
+                         LIMIT 1),
+                        (SELECT node 
+                         FROM temp_main_component_nodes
+                         LIMIT 1)
+                    ),
+                    %s, %s, %s, %s,
+                    ST_SetSRID(ST_Point(%s, %s), 4326)
+                RETURNING nearest_node_id
+            """, (station_id, lon, lat, lon, lat, weight, service_time, window_start, window_end, lon, lat))
+            
+            # DEBUG: Check if node was assigned
+            result = cur.fetchone()
+            if result and result[0] is None:
+                print(f"⚠️  CRITICAL: Station {station_id} at ({lat}, {lon}) got NULL nearest_node_id despite fallbacks!")
+            else:
+                inserted_count += 1
+        except Exception as e:
+            # Likely a duplicate key error
+            print(f"⚠️  Could not insert station {station_id}: {e}")
+            # Record as unassigned
+            try:
+                cur.execute("""
+                    INSERT INTO vector.unassigned_parcels (station_id, reason, latitude, longitude, parcel_weight, window_end)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (station_id) DO UPDATE SET reason = EXCLUDED.reason
+                """, (station_id, f"Duplicate parcel ID - {str(e)}", lat, lon, weight, window_end))
+            except:
+                pass
+    
+    print(f"DEBUG: Inserted {inserted_count} out of {len(df)} stations into station_node_map")
     
     # Clean up temp table
     cur.execute("DROP TABLE IF EXISTS temp_main_component_nodes;")
@@ -163,18 +218,33 @@ def calculate_distance_matrix(conn, warehouse_lon: float = 72.8724, warehouse_la
     # Get warehouse node once (cached)
     warehouse_node = get_warehouse_node(conn, warehouse_lon, warehouse_lat)
     
+    # Get all station nodes
+    cur.execute("SELECT DISTINCT nearest_node_id FROM vector.station_node_map WHERE nearest_node_id IS NOT NULL")
+    station_nodes = [row[0] for row in cur.fetchall()]
+    all_nodes = station_nodes + [warehouse_node]
+    
+    print(f"DEBUG: Calculating distance matrix for {len(all_nodes)} nodes (warehouse + {len(station_nodes)} stations)")
+    
     # Calculate distances using pgr_dijkstraCost (bulk operation - much faster!)
     # This calculates all-pairs shortest paths in one query
-    cur.execute("""
-        INSERT INTO vector.distance_matrix (start_vid, end_vid, agg_cost)
-        SELECT start_vid, end_vid, agg_cost
-        FROM pgr_dijkstraCost(
-            'SELECT gid AS id, source, target, cost FROM vector.road_maharashtra',
-            (SELECT ARRAY_AGG(DISTINCT nearest_node_id) FROM vector.station_node_map) || ARRAY[%s],
-            (SELECT ARRAY_AGG(DISTINCT nearest_node_id) FROM vector.station_node_map) || ARRAY[%s],
-            directed := false
-        );
-    """, (warehouse_node, warehouse_node))
+    try:
+        cur.execute("""
+            INSERT INTO vector.distance_matrix (start_vid, end_vid, agg_cost)
+            SELECT start_vid, end_vid, agg_cost
+            FROM pgr_dijkstraCost(
+                'SELECT gid AS id, source, target, cost FROM vector.road_maharashtra',
+                %s::bigint[],
+                %s::bigint[],
+                directed := false
+            )
+        """, (all_nodes, all_nodes))
+        
+        rows_inserted = cur.rowcount
+        print(f"DEBUG: Inserted {rows_inserted} distance matrix entries")
+        
+    except Exception as e:
+        print(f"⚠️  ERROR calculating distance matrix: {e}")
+        raise
     
     conn.commit()
     cur.close()
@@ -202,28 +272,77 @@ def fetch_station_data(conn) -> List[Dict[str, Any]]:
                service_time, window_start, window_end,
                ST_X(geom) as longitude, ST_Y(geom) as latitude
         FROM vector.station_node_map
+        WHERE nearest_node_id IS NOT NULL
         ORDER BY station_id
     """)
     rows = cur.fetchall()
+    
+    # Log if any stations were filtered out and record them as unassigned
+    cur.execute("SELECT COUNT(*) as count FROM vector.station_node_map WHERE nearest_node_id IS NULL")
+    result = cur.fetchone()
+    null_count = result['count'] if result else 0
+    if null_count > 0:
+        print(f"\n⚠️  WARNING: {null_count} parcels have NULL nearest_node_id and will be SKIPPED!")
+        print(f"These parcels could not be snapped to the road network.\n")
+        
+        # Record unassigned parcels in database
+        cur.execute("""
+            INSERT INTO vector.unassigned_parcels (station_id, reason, latitude, longitude, parcel_weight, window_end)
+            SELECT 
+                station_id,
+                'Could not snap to road network - no valid road node found',
+                ST_Y(geom) as latitude,
+                ST_X(geom) as longitude,
+                parcel_weight,
+                window_end
+            FROM vector.station_node_map
+            WHERE nearest_node_id IS NULL
+            ON CONFLICT (station_id) DO UPDATE SET reason = EXCLUDED.reason
+        """)
+        conn.commit()
+    
     cur.close()
     return [dict(row) for row in rows]
 
 def fetch_distance_matrix(conn, node_ids: List[int]) -> Dict[Tuple[int, int], float]:
     """Fetch distance matrix for given node IDs"""
     cur = conn.cursor()
-    node_ids_str = ",".join(map(str, node_ids))
-    cur.execute(f"""
-        SELECT start_vid, end_vid, agg_cost 
-        FROM vector.distance_matrix 
-        WHERE start_vid IN ({node_ids_str}) AND end_vid IN ({node_ids_str})
-    """)
     
-    dist_dict = {}
-    for u, v, cost in cur.fetchall():
-        dist_dict[(u, v)] = float(cost)
+    # Filter out None values
+    valid_node_ids = [n for n in node_ids if n is not None]
+    
+    print(f"DEBUG: Fetching distance matrix for {len(valid_node_ids)} nodes")
+    
+    # Fetch all distances for the given nodes
+    cur.execute("""
+        SELECT start_vid, end_vid, agg_cost
+        FROM vector.distance_matrix
+        WHERE start_vid = ANY(%s) AND end_vid = ANY(%s)
+    """, (valid_node_ids, valid_node_ids))
+    
+    rows = cur.fetchall()
+    result = {(int(row[0]), int(row[1])): float(row[2]) for row in rows}
+    
+    print(f"DEBUG: Retrieved {len(result)} distance matrix entries from database")
+    
+    # Check for missing entries
+    expected_entries = len(valid_node_ids) * len(valid_node_ids)
+    if len(result) < expected_entries:
+        missing = expected_entries - len(result)
+        print(f"⚠️  WARNING: {missing} distance matrix entries are MISSING!")
+        
+        # Find which nodes have no paths
+        nodes_with_paths = set()
+        for (start, end) in result.keys():
+            nodes_with_paths.add(start)
+            nodes_with_paths.add(end)
+        
+        missing_nodes = set(valid_node_ids) - nodes_with_paths
+        if missing_nodes:
+            print(f"⚠️  Nodes with NO paths: {list(missing_nodes)[:10]}")  # Show first 10
     
     cur.close()
-    return dist_dict
+    return result
 
 def save_route_geometry(conn, vehicle_id: int, route_nodes: List[int]):
     """

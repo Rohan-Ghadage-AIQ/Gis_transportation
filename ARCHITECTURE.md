@@ -922,6 +922,273 @@ Return .xlsx file to user
 - **Vehicle Grouping**: All deliveries grouped by vehicle
 - **Comprehensive Data**: Includes all relevant delivery and vehicle information
 
+## 🆕Feature Additions
+
+### 1. 🎯 Selective Route Visibility
+
+**Feature**: Interactive checkboxes to show/hide individual vehicle routes on the map.
+
+**Location**: Results Page → Map Legend (top-right corner)
+
+**How to Use**:
+1. Navigate to Results page after computing routes
+2. Look at the legend in the top-right corner of the map
+3. Click checkboxes next to vehicle names to toggle visibility
+4. Use "Show All" / "Hide All" buttons for bulk control
+
+**Benefits**:
+- Compare specific routes side-by-side
+- Reduce visual clutter when analyzing individual vehicles
+- Better route analysis and presentation
+
+**Technical Implementation**:
+
+#### Frontend (`MapView.tsx`)
+```typescript
+// State for visibility control
+const [visibleVehicles, setVisibleVehicles] = useState<Set<number>>(
+    new Set(results.vehicles.map(v => v.vehicle_id))
+);
+
+// Toggle function
+const toggleVehicleVisibility = (vehicleId: number) => {
+    setVisibleVehicles(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(vehicleId)) {
+            newSet.delete(vehicleId);
+        } else {
+            newSet.add(vehicleId);
+        }
+        return newSet;
+    });
+};
+
+// Visibility control effect
+useEffect(() => {
+    results.vehicles.forEach((vehicle) => {
+        const isVisible = visibleVehicles.has(vehicle.vehicle_id);
+        const visibility = isVisible ? 'visible' : 'none';
+
+        // Control route layers
+        vehicle.route_geometry?.forEach((_, idx) => {
+            map.current?.setLayoutProperty(
+                `route-${vehicle.vehicle_id}-${idx}`,
+                'visibility',
+                visibility
+            );
+        });
+        
+        // Control markers
+        const markers = markersRef.current.get(vehicle.vehicle_id) || [];
+        markers.forEach(marker => {
+            marker.getElement().style.display = isVisible ? 'block' : 'none';
+        });
+    });
+}, [visibleVehicles, results.vehicles]);
+```
+
+**Key Features**:
+- Checkboxes in legend for each vehicle
+- "Show All" / "Hide All" buttons
+- Synchronized route and marker visibility
+- Efficient Set-based state management
+- MapTiler SDK's `setLayoutProperty` for layer control
+- Direct DOM manipulation for marker display
+
+---
+
+### 2. 📊 Unassigned Parcels Reporting
+
+**Feature**: Dedicated Excel sheet showing parcels that couldn't be assigned to any vehicle, with detailed reasons.
+
+**Location**: Excel Report → "Unassigned Parcels" Sheet (2nd tab)
+
+**Tracked Reasons**:
+1. **"Could not snap to road network - no valid road node found"**
+   - Parcel location is too far from any road
+   - No valid road node in the main network component
+   
+2. **"Could not fit into any vehicle route (capacity/time/distance constraints)"**
+   - VRP solver couldn't assign the parcel
+   - Exceeded vehicle capacity, time windows, or distance limits
+
+**Excel Sheet Format**:
+- **Red Header** (#E74C3C) - alerts user to issues
+- **Columns**: Parcel ID, Reason, Latitude, Longitude, Weight (kg), Window End
+- **Wide Reason Column** (60 chars) - full text visible
+- **Text Wrapping** - long reasons readable
+- **Left-aligned reason** - easier to read
+
+**Data Flow**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   UNASSIGNED PARCELS FLOW                    │
+└─────────────────────────────────────────────────────────────┘
+
+1. STATION INSERTION (database.py)
+   ↓
+   Check for NULL nearest_node_id
+   ↓
+   If found → INSERT INTO unassigned_parcels
+   Reason: "Could not snap to road network"
+
+2. VRP SOLVING (vrp_solver.py)
+   ↓
+   Solve optimization
+   ↓
+   Check for NULL vehicle_id
+   ↓
+   If found → INSERT INTO unassigned_parcels
+   Reason: "Could not fit into any vehicle route"
+
+3. REPORT GENERATION (report_generator.py)
+   ↓
+   Query unassigned_parcels table
+   ↓
+   If rows exist → Create "Unassigned Parcels" sheet
+   ↓
+   Apply red theme and formatting
+```
+
+**Technical Implementation**:
+
+#### Database Schema (`database.py`)
+```sql
+CREATE TABLE vector.unassigned_parcels (
+    station_id VARCHAR PRIMARY KEY,
+    reason VARCHAR NOT NULL,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    parcel_weight INTEGER,
+    window_end INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Tracking NULL Nodes (`database.py`)
+```python
+# In fetch_station_data()
+if null_count > 0:
+    cur.execute("""
+        INSERT INTO vector.unassigned_parcels 
+        (station_id, reason, latitude, longitude, parcel_weight, window_end)
+        SELECT 
+            station_id,
+            'Could not snap to road network - no valid road node found',
+            ST_Y(geom) as latitude,
+            ST_X(geom) as longitude,
+            parcel_weight,
+            window_end
+        FROM vector.station_node_map
+        WHERE nearest_node_id IS NULL
+        ON CONFLICT (station_id) DO UPDATE SET reason = EXCLUDED.reason
+    """)
+```
+
+#### Tracking VRP Drops (`vrp_solver.py`)
+```python
+# After VRP solving
+cur.execute("""
+    INSERT INTO vector.unassigned_parcels 
+    (station_id, reason, latitude, longitude, parcel_weight, window_end)
+    SELECT 
+        station_id,
+        'Could not fit into any vehicle route (capacity/time/distance constraints)',
+        ST_Y(geom) as latitude,
+        ST_X(geom) as longitude,
+        parcel_weight,
+        window_end
+    FROM vector.station_node_map
+    WHERE vehicle_id IS NULL
+    ON CONFLICT (station_id) DO UPDATE SET reason = EXCLUDED.reason
+""")
+```
+
+#### Report Generation (`report_generator.py`)
+```python
+# Query unassigned parcels
+cursor.execute("""
+    SELECT station_id, reason, latitude, longitude, parcel_weight, window_end
+    FROM vector.unassigned_parcels
+    ORDER BY station_id
+""")
+unassigned = cursor.fetchall()
+
+# Create sheet if unassigned parcels exist
+if unassigned:
+    ws_unassigned = wb.create_sheet("Unassigned Parcels")
+    
+    # Red header theme
+    unassigned_header_fill = PatternFill(
+        start_color="E74C3C", 
+        end_color="E74C3C", 
+        fill_type="solid"
+    )
+    
+    # Wide reason column (60 chars)
+    ws_unassigned.column_dimensions['B'].width = 60
+    
+    # Left-align reason with text wrapping
+    cell.alignment = Alignment(
+        horizontal="left", 
+        vertical="center", 
+        wrap_text=True
+    )
+```
+
+#### Lifecycle Management (`main.py`)
+```python
+@app.on_event("startup")
+async def startup_event():
+    # Initialize tables on server start
+    setup_station_node_map_table(conn)
+
+# In compute_routes()
+cur.execute("TRUNCATE TABLE vector.unassigned_parcels")  # Clear on new computation
+```
+
+**Database Schema Updates**:
+
+**New Table**: `vector.unassigned_parcels`
+- Primary Key: `station_id`
+- Indexed: `created_at` (for potential cleanup)
+- Cleared: On each new computation
+
+**Modified Table**: `vector.station_node_map`
+- Added: `arrival_time TEXT`
+- Added: `delivery_status TEXT`
+
+**Testing Guide**:
+
+*Selective Route Visibility*:
+1. Run computation with multiple vehicles
+2. Navigate to Results page
+3. Test individual checkboxes
+4. Test "Show All" / "Hide All" buttons
+5. Verify routes and markers toggle together
+
+*Unassigned Parcels*:
+1. Upload CSV with parcels in remote locations
+2. Run computation
+3. Download Excel report
+4. Check for "Unassigned Parcels" sheet (2nd tab)
+5. Verify reasons are descriptive and accurate
+
+**Benefits**:
+
+*For Users*:
+- **Better Visibility**: Control which routes to view on map
+- **Transparency**: Know exactly why parcels weren't assigned
+- **Actionable Insights**: Address location or constraint issues
+- **Professional Reports**: Clear documentation of issues
+
+*For Developers*:
+- **Clean Architecture**: Separation of concerns
+- **Extensible**: Easy to add more unassignment reasons
+- **Well-Documented**: Clear code comments and structure
+- **Maintainable**: Centralized tracking in dedicated table
+
 ## 🐛 Recent Bug Fixes
 
 ### Fixed Issues (February 2026)

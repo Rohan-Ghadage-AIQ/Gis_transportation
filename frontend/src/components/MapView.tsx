@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as maptilersdk from '@maptiler/sdk';
 import type { RouteResults } from '../types/api';
 
@@ -9,6 +9,25 @@ interface MapViewProps {
 export const MapView: React.FC<MapViewProps> = ({ results }) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<maptilersdk.Map | null>(null);
+    const markersRef = useRef<Map<number, maptilersdk.Marker[]>>(new Map());
+
+    // State to track which vehicles are visible (all visible by default)
+    const [visibleVehicles, setVisibleVehicles] = useState<Set<number>>(
+        new Set(results.vehicles.map(v => v.vehicle_id))
+    );
+
+    // Toggle vehicle visibility
+    const toggleVehicleVisibility = (vehicleId: number) => {
+        setVisibleVehicles(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(vehicleId)) {
+                newSet.delete(vehicleId);
+            } else {
+                newSet.add(vehicleId);
+            }
+            return newSet;
+        });
+    };
 
     useEffect(() => {
         if (!mapContainer.current || map.current) return;
@@ -98,7 +117,8 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
                 }
 
 
-                // Add station markers
+                // Add station markers and store references
+                const vehicleMarkers: maptilersdk.Marker[] = [];
                 vehicle.stations.forEach((station, index) => {
                     if (!map.current) return;
 
@@ -112,7 +132,7 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
                     el.style.cursor = 'pointer';
                     el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
 
-                    new maptilersdk.Marker({ element: el })
+                    const marker = new maptilersdk.Marker({ element: el })
                         .setLngLat([station.lon, station.lat])
                         .setPopup(
                             new maptilersdk.Popup({ offset: 25 }).setHTML(
@@ -130,7 +150,12 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
                             )
                         )
                         .addTo(map.current);
+
+                    vehicleMarkers.push(marker);
                 });
+
+                // Store markers for this vehicle
+                markersRef.current.set(vehicle.vehicle_id, vehicleMarkers);
             });
         });
 
@@ -140,16 +165,78 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
         };
     }, [results]);
 
+    // Control layer and marker visibility based on visibleVehicles state
+    useEffect(() => {
+        if (!map.current) return;
+
+        results.vehicles.forEach((vehicle) => {
+            const isVisible = visibleVehicles.has(vehicle.vehicle_id);
+            const visibility = isVisible ? 'visible' : 'none';
+
+            // Hide/show route lines and arrows
+            vehicle.route_geometry?.forEach((_, idx) => {
+                try {
+                    map.current?.setLayoutProperty(
+                        `route-${vehicle.vehicle_id}-${idx}`,
+                        'visibility',
+                        visibility
+                    );
+                    map.current?.setLayoutProperty(
+                        `route-arrows-${vehicle.vehicle_id}-${idx}`,
+                        'visibility',
+                        visibility
+                    );
+                } catch (e) {
+                    // Layer might not exist yet
+                }
+            });
+
+            // Hide/show markers
+            const markers = markersRef.current.get(vehicle.vehicle_id) || [];
+            markers.forEach(marker => {
+                const el = marker.getElement();
+                el.style.display = isVisible ? 'block' : 'none';
+            });
+        });
+    }, [visibleVehicles, results.vehicles]);
+
     return (
         <div className="relative w-full h-full">
             <div ref={mapContainer} className="map-container" />
 
-            {/* Legend */}
+            {/* Legend with Checkboxes */}
             <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-xs">
-                <h3 className="text-gray-900 font-semibold mb-2">Vehicle Routes</h3>
-                <div className="space-y-1">
+                <h3 className="text-gray-900 font-semibold mb-3">Vehicle Routes</h3>
+
+                {/* Show All / Hide All Buttons */}
+                <div className="flex gap-2 mb-3">
+                    <button
+                        onClick={() => setVisibleVehicles(new Set(results.vehicles.map(v => v.vehicle_id)))}
+                        className="flex-1 text-xs px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors"
+                    >
+                        Show All
+                    </button>
+                    <button
+                        onClick={() => setVisibleVehicles(new Set())}
+                        className="flex-1 text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
+                    >
+                        Hide All
+                    </button>
+                </div>
+
+                {/* Vehicle Checkboxes */}
+                <div className="space-y-2">
                     {results.vehicles.map((vehicle) => (
-                        <div key={vehicle.vehicle_id} className="flex items-center text-sm">
+                        <label
+                            key={vehicle.vehicle_id}
+                            className="flex items-center text-sm cursor-pointer hover:bg-gray-50 p-1 rounded transition-colors"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={visibleVehicles.has(vehicle.vehicle_id)}
+                                onChange={() => toggleVehicleVisibility(vehicle.vehicle_id)}
+                                className="mr-2 cursor-pointer"
+                            />
                             <div
                                 className="w-4 h-4 rounded-full mr-2"
                                 style={{ backgroundColor: vehicle.color }}
@@ -157,7 +244,7 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
                             <span className="text-gray-700">
                                 Vehicle {vehicle.vehicle_id} ({vehicle.stations.length} stops)
                             </span>
-                        </div>
+                        </label>
                     ))}
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-200">

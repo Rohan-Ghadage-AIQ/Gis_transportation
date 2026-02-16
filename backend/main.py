@@ -78,9 +78,22 @@ class WarehouseConfig(BaseModel):
     longitude: float
 
 
+
 class ComputeResponse(BaseModel):
     status: str
     message: str
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database tables on startup"""
+    try:
+        conn = get_db_connection()
+        setup_station_node_map_table(conn)
+        conn.close()
+        print("✓ Database tables initialized")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize tables: {e}")
 
 
 @app.get("/")
@@ -311,6 +324,13 @@ async def compute_routes():
         # Step 1: Setup table
         print("\n[Step 1/5] Setting up station_node_map table...")
         setup_station_node_map_table(conn)
+        
+        # Clear unassigned parcels table for fresh tracking
+        cur = conn.cursor()
+        cur.execute("TRUNCATE TABLE vector.unassigned_parcels")
+        conn.commit()
+        cur.close()
+        
         print("✓ Table setup complete")
         
         # Step 2: Insert stations

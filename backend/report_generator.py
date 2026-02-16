@@ -222,6 +222,78 @@ def generate_delivery_report(conn) -> bytes:
         
         row_num += 1
     
+    # ========================================
+    # CREATE UNASSIGNED PARCELS SHEET
+    # ========================================
+    
+    # Query unassigned parcels (handle case where table doesn't exist yet)
+    try:
+        cursor.execute("""
+            SELECT 
+                station_id,
+                reason,
+                latitude,
+                longitude,
+                parcel_weight,
+                window_end
+            FROM vector.unassigned_parcels
+            ORDER BY station_id
+        """)
+        unassigned = cursor.fetchall()
+        print(f"DEBUG: Found {len(unassigned)} unassigned parcels for report")
+    except Exception as e:
+        # Table might not exist if no computation has been run yet
+        print(f"Note: Could not query unassigned_parcels table: {e}")
+        unassigned = []
+    
+    # Only create sheet if there are unassigned parcels
+    if unassigned:
+        ws_unassigned = wb.create_sheet("Unassigned Parcels")
+        
+        # Define header style for unassigned sheet (red theme)
+        unassigned_header_fill = PatternFill(start_color="E74C3C", end_color="E74C3C", fill_type="solid")
+        
+        # Write headers
+        unassigned_headers = [
+            "Parcel ID", "Reason", "Latitude", "Longitude", 
+            "Weight (kg)", "Window End"
+        ]
+        
+        for col_num, header in enumerate(unassigned_headers, 1):
+            cell = ws_unassigned.cell(row=1, column=col_num, value=header)
+            cell.fill = unassigned_header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+            cell.border = border
+        
+        # Set column widths
+        ws_unassigned.column_dimensions['A'].width = 15  # Parcel ID
+        ws_unassigned.column_dimensions['B'].width = 60  # Reason (wider for text)
+        ws_unassigned.column_dimensions['C'].width = 15  # Latitude
+        ws_unassigned.column_dimensions['D'].width = 15  # Longitude
+        ws_unassigned.column_dimensions['E'].width = 15  # Weight
+        ws_unassigned.column_dimensions['F'].width = 15  # Window End
+        
+        # Write data rows
+        row_num = 2
+        for parcel in unassigned:
+            station_id, reason, lat, lon, weight, window_end = parcel
+            window_end_str = minutes_to_time_str(window_end) if window_end > 0 else "Anytime"
+            
+            row_data = [station_id, reason, lat, lon, weight, window_end_str]
+            
+            for col_num, value in enumerate(row_data, 1):
+                cell = ws_unassigned.cell(row=row_num, column=col_num, value=value)
+                cell.border = border
+                
+                # Left-align reason column for better readability
+                if col_num == 2:
+                    cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+                else:
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            row_num += 1
+    
     cursor.close()
     
     # Save to bytes
