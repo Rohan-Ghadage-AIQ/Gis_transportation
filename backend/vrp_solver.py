@@ -50,19 +50,29 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         )
     
     size = len(nodes_in_system)
-    node_to_idx = {node: i for i, node in enumerate(nodes_in_system)}
-    idx_to_node = {i: node for node, i in node_to_idx.items()}
     
-    # Fetch distance matrix
-    dist_dict = fetch_distance_matrix(conn, nodes_in_system)
+    # Fetch distance matrix (keyed by road node IDs)
+    unique_nodes = list(set(nodes_in_system))
+    dist_dict = fetch_distance_matrix(conn, unique_nodes)
     
-    # Build 2D distance matrix
+    # Build 2D distance matrix by STATION INDEX (not road node)
+    # This correctly handles multiple stations sharing the same road node
     dist_matrix = [[1000000] * size for _ in range(size)]
     for i in range(size):
         dist_matrix[i][i] = 0
-    for (u, v), cost in dist_dict.items():
-        if u in node_to_idx and v in node_to_idx:
-            dist_matrix[node_to_idx[u]][node_to_idx[v]] = int(float(cost))
+    for i in range(size):
+        for j in range(size):
+            if i == j:
+                continue
+            road_node_i = nodes_in_system[i]
+            road_node_j = nodes_in_system[j]
+            if road_node_i == road_node_j:
+                dist_matrix[i][j] = 0
+            elif (road_node_i, road_node_j) in dist_dict:
+                dist_matrix[i][j] = int(float(dist_dict[(road_node_i, road_node_j)]))
+    
+    # idx_to_node mapping (for route geometry saving)
+    idx_to_node = {i: nodes_in_system[i] for i in range(size)}
     
     # Vehicle configuration - Increased to 10 vehicles to handle all deliveries
     num_vehicles = 10
@@ -104,32 +114,36 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     )
     time_dimension = routing.GetDimensionOrDie('Time')
     
-    # Apply time windows - use BOTH window_start and window_end as hard constraints
+    # Apply time windows
+    # Parcel deadlines are SOFT constraints — late delivery is preferred over dropping
     for i in range(1, size):
         index = manager.NodeToIndex(i)
         ws, deadline = node_windows[i]
-        # Hard constraint: arrival must be within [window_start, window_end]
-        time_dimension.CumulVar(index).SetRange(ws, deadline)
-        # Soft preference: penalize arriving close to the deadline
-        preferred_time = max(ws, deadline - 60)
-        time_dimension.SetCumulVarSoftUpperBound(index, preferred_time, 5000)
+        # Hard range: allow delivery anytime within the overall shift window
+        time_dimension.CumulVar(index).SetRange(0, max_shift)
+        # Soft penalty: strongly prefer delivery before the parcel's deadline
+        time_dimension.SetCumulVarSoftUpperBound(index, deadline, 100000)
     
     # Vehicle-specific time constraints
     for v in range(num_vehicles):
         start_avail, end_avail = vehicle_times[v]
         start_index = routing.Start(v)
+        # Hard: vehicle cannot start before its shift
         time_dimension.CumulVar(start_index).SetRange(start_avail, start_avail)
         end_index = routing.End(v)
-        # Hard constraint: vehicle must finish within its shift
-        time_dimension.CumulVar(end_index).SetRange(start_avail, end_avail)
+        # Hard: vehicle must return by shift end + 60 min overtime buffer
+        overtime_limit = min(end_avail + 60, max_shift)
+        time_dimension.CumulVar(end_index).SetRange(start_avail, overtime_limit)
+        # Soft: penalize going past actual shift end
+        time_dimension.SetCumulVarSoftUpperBound(end_index, end_avail, 50000)
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(start_index))
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
-        routing.SetFixedCostOfVehicle(10000, v)
+        # Low fixed cost to encourage using ALL vehicles
+        routing.SetFixedCostOfVehicle(2000, v)
     
-    # Penalty for dropping parcels - EXTREMELY HIGH to ensure all parcels are delivered
-    # This makes it almost impossible for the solver to drop a parcel
+    # VERY HIGH penalty for dropping parcels — makes it virtually impossible
     for i in range(1, size):
-        routing.AddDisjunction([manager.NodeToIndex(i)], 1000000)
+        routing.AddDisjunction([manager.NodeToIndex(i)], 10000000)
     
     # Cost callback per vehicle
     def create_cost_callback(v_idx):
@@ -164,9 +178,6 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         index = routing.End(i)
         # Relax soft capacity bounds to allow slight overloading if needed
         capacity_dimension.SetCumulVarSoftUpperBound(index, 300, 500)
-        routing.SetFixedCostOfVehicle(10000, i)
-        routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.Start(i)))
-        routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.End(i)))
     
     # Solve with optimized parameters for speed
     search_params = pywrapcp.DefaultRoutingSearchParameters()

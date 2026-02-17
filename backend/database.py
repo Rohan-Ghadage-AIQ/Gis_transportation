@@ -170,14 +170,15 @@ def randomize_station_attributes(conn):
     """)
     
     # Randomize time windows across 3 shifts
+    # Minimum window_end of 60 (8 AM) ensures vehicles have travel time to reach parcels
     cur.execute("""
         UPDATE vector.station_node_map 
         SET 
             window_start = 0, 
             window_end = CASE 
-                WHEN random() < 0.3 THEN floor(random() * (180-0+1) + 0)   -- Shift 1 (7-10 AM)
-                WHEN random() < 0.8 THEN floor(random() * (660-180+1) + 180) -- Shift 2 (10 AM-6 PM)
-                ELSE floor(random() * (840-660+1) + 660)                    -- Shift 3 (6-9 PM)
+                WHEN random() < 0.3 THEN floor(random() * (180-60+1) + 60)  -- Shift 1 (8-10 AM)
+                WHEN random() < 0.8 THEN floor(random() * (660-240+1) + 240) -- Shift 2 (11 AM-6 PM)
+                ELSE floor(random() * (840-660+1) + 660)                     -- Shift 3 (6-9 PM)
             END;
     """)
     
