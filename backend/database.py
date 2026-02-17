@@ -18,23 +18,47 @@ def get_db_connection():
     )
 
 def setup_station_node_map_table(conn):
-    """Create or reset the station_node_map table"""
+    """Create or reset the station_node_map table.
+    
+    Uses TRUNCATE instead of DROP/CREATE to avoid blocking on active connections.
+    Falls back to DROP if table structure needs to be recreated.
+    """
     cur = conn.cursor()
+    
+    # Terminate any other connections that might be blocking
     cur.execute("""
-        DROP TABLE IF EXISTS vector.station_node_map CASCADE;
-        CREATE TABLE vector.station_node_map (
-            station_id TEXT PRIMARY KEY,
-            nearest_node_id BIGINT,
-            parcel_weight INT DEFAULT 20,
-            service_time INT DEFAULT 10,
-            window_start INT DEFAULT 0,
-            window_end INT DEFAULT 480,
-            vehicle_id INTEGER,
-            arrival_time TEXT,
-            delivery_status TEXT,
-            geom geometry(Point, 4326)
-        );
-        
+        SELECT pg_terminate_backend(pid) 
+        FROM pg_stat_activity 
+        WHERE datname = current_database() 
+          AND pid <> pg_backend_pid()
+          AND state = 'idle in transaction';
+    """)
+    
+    # Try TRUNCATE first (fast, doesn't block)
+    try:
+        cur.execute("TRUNCATE TABLE vector.station_node_map;")
+        conn.commit()
+    except Exception:
+        # Table doesn't exist yet, create it
+        conn.rollback()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vector.station_node_map (
+                station_id TEXT PRIMARY KEY,
+                nearest_node_id BIGINT,
+                parcel_weight INT DEFAULT 20,
+                service_time INT DEFAULT 10,
+                window_start INT DEFAULT 0,
+                window_end INT DEFAULT 480,
+                vehicle_id INTEGER,
+                arrival_time TEXT,
+                delivery_status TEXT,
+                geom geometry(Point, 4326)
+            );
+        """)
+        conn.commit()
+    
+    # Ensure unassigned_parcels table exists
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS vector.unassigned_parcels (
             station_id VARCHAR PRIMARY KEY,
             reason VARCHAR NOT NULL,
@@ -90,50 +114,33 @@ def insert_stations_from_dataframe(conn, df: pd.DataFrame, warehouse_lon: float 
         window_end = int(row.get('window_end', 480))
         
         # Use pre-fetched main component nodes for faster lookups
-        # FALLBACK CHAIN: temp_table → component_11_nearest → warehouse_node
-        try:
-            cur.execute("""
-                INSERT INTO vector.station_node_map (station_id, nearest_node_id, parcel_weight, service_time, window_start, window_end, geom)
-                SELECT 
-                    %s,
-                    COALESCE(
-                        (SELECT node 
-                         FROM temp_main_component_nodes
-                         ORDER BY geom <-> ST_SetSRID(ST_Point(%s, %s), 4326) 
-                         LIMIT 1),
-                        (SELECT m.node 
-                         FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m
-                         JOIN vector.road_maharashtra r ON r.source = m.node
-                         WHERE m.component = 11
-                         ORDER BY r.geom <-> ST_SetSRID(ST_Point(%s, %s), 4326)
-                         LIMIT 1),
-                        (SELECT node 
-                         FROM temp_main_component_nodes
-                         LIMIT 1)
-                    ),
-                    %s, %s, %s, %s,
-                    ST_SetSRID(ST_Point(%s, %s), 4326)
-                RETURNING nearest_node_id
-            """, (station_id, lon, lat, lon, lat, weight, service_time, window_start, window_end, lon, lat))
-            
-            # DEBUG: Check if node was assigned
-            result = cur.fetchone()
-            if result and result[0] is None:
-                print(f"⚠️  CRITICAL: Station {station_id} at ({lat}, {lon}) got NULL nearest_node_id despite fallbacks!")
-            else:
-                inserted_count += 1
-        except Exception as e:
-            # Likely a duplicate key error
-            print(f"⚠️  Could not insert station {station_id}: {e}")
-            # Record as unassigned
-            try:
-                cur.execute("""
-                    INSERT INTO vector.unassigned_parcels (station_id, reason, latitude, longitude, parcel_weight, window_end)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (station_id) DO UPDATE SET reason = EXCLUDED.reason
-                """, (station_id, f"Duplicate parcel ID - {str(e)}", lat, lon, weight, window_end))
-            except:
-                pass
+        # FALLBACK CHAIN: nearest node in temp_table → any node in temp_table
+        # NOTE: Removed pgr_connectedComponents fallback - it caused a full graph
+        # traversal (160K+ nodes) per station, turning a 2-min job into 10+ min.
+        cur.execute("""
+            INSERT INTO vector.station_node_map (station_id, nearest_node_id, parcel_weight, service_time, window_start, window_end, geom)
+            SELECT 
+                %s,
+                COALESCE(
+                    (SELECT node 
+                     FROM temp_main_component_nodes
+                     ORDER BY geom <-> ST_SetSRID(ST_Point(%s, %s), 4326) 
+                     LIMIT 1),
+                    (SELECT node 
+                     FROM temp_main_component_nodes
+                     LIMIT 1)
+                ),
+                %s, %s, %s, %s,
+                ST_SetSRID(ST_Point(%s, %s), 4326)
+            RETURNING nearest_node_id
+        """, (station_id, lon, lat, weight, service_time, window_start, window_end, lon, lat))
+        
+        # Check if node was assigned
+        result = cur.fetchone()
+        if result and result[0] is None:
+            print(f"⚠️  CRITICAL: Station {station_id} at ({lat}, {lon}) got NULL nearest_node_id despite fallbacks!")
+        else:
+            inserted_count += 1
     
     print(f"DEBUG: Inserted {inserted_count} out of {len(df)} stations into station_node_map")
     

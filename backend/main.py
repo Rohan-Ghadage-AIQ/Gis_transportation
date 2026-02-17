@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -25,7 +26,36 @@ from geocoding import batch_geocode
 
 load_dotenv()
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database tables on startup"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        # Only create the unassigned_parcels table if it doesn't exist
+        # NOTE: station_node_map is dropped/recreated during each computation,
+        # so we do NOT call setup_station_node_map_table() here (it runs
+        # DROP TABLE CASCADE which blocks on active connections).
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vector.unassigned_parcels (
+                station_id VARCHAR PRIMARY KEY,
+                reason VARCHAR NOT NULL,
+                latitude DOUBLE PRECISION,
+                longitude DOUBLE PRECISION,
+                parcel_weight INTEGER,
+                window_end INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("✓ Database tables initialized")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize tables: {e}")
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 # CORS configuration
 origins = [
@@ -82,18 +112,6 @@ class WarehouseConfig(BaseModel):
 class ComputeResponse(BaseModel):
     status: str
     message: str
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database tables on startup"""
-    try:
-        conn = get_db_connection()
-        setup_station_node_map_table(conn)
-        conn.close()
-        print("✓ Database tables initialized")
-    except Exception as e:
-        print(f"⚠️  Warning: Could not initialize tables: {e}")
 
 
 @app.get("/")
