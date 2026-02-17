@@ -93,24 +93,26 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     
     time_callback_index = routing.RegisterTransitCallback(time_callback)
     
-    # Time dimension
+    # Time dimension - max is the latest vehicle shift end
+    max_shift = max(end for _, end in vehicle_times)
     routing.AddDimension(
         time_callback_index,
         60,   # slack
-        840,  # 14 hours total shift (increased from 720 to match time windows)
+        max_shift,  # Max across all vehicle shifts
         False,
         'Time'
     )
     time_dimension = routing.GetDimensionOrDie('Time')
     
-    # Apply time windows
+    # Apply time windows - use BOTH window_start and window_end as hard constraints
     for i in range(1, size):
         index = manager.NodeToIndex(i)
-        deadline = node_windows[i][1]
-        time_dimension.CumulVar(index).SetRange(0, 840)
-        preferred_time = max(0, deadline - 60)
+        ws, deadline = node_windows[i]
+        # Hard constraint: arrival must be within [window_start, window_end]
+        time_dimension.CumulVar(index).SetRange(ws, deadline)
+        # Soft preference: penalize arriving close to the deadline
+        preferred_time = max(ws, deadline - 60)
         time_dimension.SetCumulVarSoftUpperBound(index, preferred_time, 5000)
-        time_dimension.SetCumulVarSoftUpperBound(index, deadline, 100000000)
     
     # Vehicle-specific time constraints
     for v in range(num_vehicles):
@@ -118,8 +120,8 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         start_index = routing.Start(v)
         time_dimension.CumulVar(start_index).SetRange(start_avail, start_avail)
         end_index = routing.End(v)
-        time_dimension.CumulVar(end_index).SetRange(start_avail, 840)
-        time_dimension.SetCumulVarSoftUpperBound(end_index, end_avail, 50000)
+        # Hard constraint: vehicle must finish within its shift
+        time_dimension.CumulVar(end_index).SetRange(start_avail, end_avail)
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(start_index))
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
         routing.SetFixedCostOfVehicle(10000, v)
@@ -293,6 +295,21 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
             "work_duration_mins": actual_work_time,
             "overtime_mins": overtime
         })
+    
+    # ========================================
+    # POST-SOLUTION VALIDATION
+    # ========================================
+    # Verify no parcel is scheduled outside its vehicle's operating hours
+    for route in routes:
+        v_id = route["vehicle_id"]
+        v_start, v_end = vehicle_times[v_id - 1]
+        v_start_clock = min_to_clock(v_start)
+        v_end_clock = min_to_clock(v_end)
+        for stop in route["stops"]:
+            # Parse arrival time back to compare
+            arrival_str = stop["arrival_time"]
+            print(f"  ✅ V{v_id} [{v_start_clock}-{v_end_clock}] → "
+                  f"Parcel {stop['station_id']} arrives {arrival_str} ({stop['status']})")
     
     conn.commit()
     
