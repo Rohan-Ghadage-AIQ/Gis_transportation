@@ -9,23 +9,19 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 
 def parse_time_str(time_str: str) -> int:
-    """Convert time string like '09:30 AM' to minutes since midnight"""
+    """Convert time string like '09:30' (24-hour) to minutes since midnight"""
     try:
-        time_obj = datetime.strptime(time_str, "%I:%M %p")
-        return time_obj.hour * 60 + time_obj.minute
+        parts = time_str.strip().split(':')
+        return int(parts[0]) * 60 + int(parts[1])
     except:
         return 0
 
 
 def minutes_to_time_str(minutes: int) -> str:
-    """Convert minutes since midnight to time string like '09:30 AM'"""
+    """Convert minutes since midnight to 24-hour time string like '09:30'"""
     hours = minutes // 60
     mins = minutes % 60
-    period = "AM" if hours < 12 else "PM"
-    display_hour = hours if hours <= 12 else hours - 12
-    if display_hour == 0:
-        display_hour = 12
-    return f"{display_hour:02d}:{mins:02d} {period}"
+    return f"{hours:02d}:{mins:02d}"
 
 
 def determine_delivery_status(arrival_time_str: str, window_end: int) -> str:
@@ -33,7 +29,7 @@ def determine_delivery_status(arrival_time_str: str, window_end: int) -> str:
     Determine if delivery is on-time, late, or early
     
     Args:
-        arrival_time_str: Arrival time like "09:30 AM" or "N/A"
+        arrival_time_str: Arrival time like "09:30" (24-hour) or "N/A"
         window_end: Window end time in minutes since midnight
         
     Returns:
@@ -49,12 +45,15 @@ def determine_delivery_status(arrival_time_str: str, window_end: int) -> str:
         if window_end == 0:
             return "ON_TIME"
         
-        # Check if within buffer (15 minutes grace period)
-        buffer_mins = 15
-        if arrival_mins <= window_end:
-            return "ON_TIME"
-        elif arrival_mins <= window_end + buffer_mins:
+        diff = window_end - arrival_mins
+        
+        # If early by 60 mins or more -> IN_BUFFER (Safe)
+        if diff >= 60:
             return "IN_BUFFER"
+        # If early by 0-59 mins -> ON_TIME (Tight)
+        elif diff >= 0:
+            return "ON_TIME"
+        # If late -> LATE
         else:
             return "LATE"
     except:
@@ -85,7 +84,7 @@ def generate_delivery_report(conn) -> bytes:
             s.delivery_status
         FROM vector.station_node_map s
         WHERE s.vehicle_id IS NOT NULL
-        ORDER BY s.vehicle_id, s.station_id
+        ORDER BY s.vehicle_id, s.arrival_time
     """
     
     cursor.execute(query)
@@ -101,18 +100,19 @@ def generate_delivery_report(conn) -> bytes:
     """)
     vehicle_distances = {row[0]: row[1] for row in cursor.fetchall()}
     
-    # Get vehicle shift times
+    # Get vehicle shift times (must match vrp_solver.py)
+    # Format: (start_time_str, duration_minutes)
     vehicle_shifts = [
-        ("06:00 AM", 720),  # V1: 6 AM - 6 PM
-        ("07:00 AM", 840),  # V2: 7 AM - 9 PM
-        ("06:00 AM", 780),  # V3: 6 AM - 8 PM
-        ("08:00 AM", 720),  # V4: 8 AM - 8 PM
-        ("07:00 AM", 720),  # V5: 7 AM - 7 PM
-        ("06:00 AM", 660),  # V6: 6 AM - 6 PM
-        ("08:00 AM", 840),  # V7: 8 AM - 9 PM
-        ("07:00 AM", 780),  # V8: 7 AM - 8 PM
-        ("07:00 AM", 720),  # V9: 7 AM - 7 PM
-        ("08:00 AM", 780)   # V10: 8 AM - 8 PM
+        ("09:00", 540),  # V1: 09:00 - 18:00 (540, 1080) -> Dur: 540 (9h)
+        ("09:00", 540),  # V2: 09:00 - 18:00 (540, 1080)
+        ("07:00", 480),  # V3: 07:00 - 15:00 (420, 900) -> Dur: 480 (8h)
+        ("07:00", 660),  # V4: 07:00 - 18:00 (420, 1080) -> Dur: 660 (11h)
+        ("09:00", 480),  # V5: 09:00 - 17:00 (540, 1020) -> Dur: 480 (8h)
+        ("08:00", 600),  # V6: 08:00 - 18:00 (480, 1080) -> Dur: 600 (10h)
+        ("08:00", 780),  # V7: 08:00 - 21:00 (480, 1260) -> Dur: 780 (13h)
+        ("07:00", 780),  # V8: 07:00 - 20:00 (420, 1200) -> Dur: 780 (13h)
+        ("07:00", 720),  # V9: 07:00 - 19:00 (420, 1140) -> Dur: 720 (12h)
+        ("08:00", 720)   # V10: 08:00 - 20:00 (480, 1200) -> Dur: 720 (12h)
     ]
     
     # Create Excel workbook
@@ -222,6 +222,83 @@ def generate_delivery_report(conn) -> bytes:
         
         row_num += 1
     
+        row_num += 1
+    
+    # ========================================
+    # APPEND SHIFT-WISE SUMMARY (At Bottom)
+    # ========================================
+    
+    # Define Shift Intervals (must match main.py SHIFTS)
+    # 07:00-10:00 (420-600), 10:00-18:00 (600-1080), 18:00-21:00 (1080-1260)
+    shift_intervals = {
+        420: "07:00 - 10:00",
+        600: "10:00 - 18:00",
+        1080: "18:00 - 21:00"
+    }
+
+    # Group parcels by Shift (window_start)
+    # deliveries index: 0:id, 4:weight, 5:service, 6:window_start, 7:window_end
+    parcels_by_shift = {}
+    for d in deliveries:
+        w_start = d[6]
+        if w_start not in parcels_by_shift:
+            parcels_by_shift[w_start] = []
+        parcels_by_shift[w_start].append(d)
+
+    # Sort shifts chronologically
+    sorted_starts = sorted(parcels_by_shift.keys())
+
+    # Add spacing
+    row_num += 3
+    
+    # Header for Summary Section
+    header_cell = ws.cell(row=row_num, column=1, value="SHIFT-WISE PARCEL SUMMARY")
+    header_cell.font = Font(bold=True, size=14, color="000000")
+    row_num += 2
+
+    # Iterate through each shift block
+    for start_min in sorted_starts:
+        shift_name = shift_intervals.get(start_min, f"Start: {minutes_to_time_str(start_min)}")
+        
+        # Shift Header
+        shift_header_cell = ws.cell(row=row_num, column=1, value=f"Shift: {shift_name}")
+        shift_header_cell.font = Font(bold=True, size=12, color="FFFFFF")
+        shift_header_cell.fill = PatternFill(start_color="808080", end_color="808080", fill_type="solid") # Grey
+        row_num += 1
+        
+        # Table Headers
+        summary_headers = ["Parcel ID", "Parcel Weight (kg)", "Service Time (min)", "Window End"]
+        for c, h in enumerate(summary_headers, 1):
+             cell = ws.cell(row=row_num, column=c, value=h)
+             cell.font = Font(bold=True)
+             cell.border = border
+             cell.alignment = Alignment(horizontal="center")
+             # Light grey background for sub-headers
+             cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid") 
+        row_num += 1
+        
+        # Data Rows
+        for d in parcels_by_shift[start_min]:
+             # d indices: 0:id, 4:weight, 5:service, 7:window_end
+             p_id = d[0]
+             p_weight = d[4]
+             p_service = d[5]
+             p_window_end = d[7]
+             p_window_end_str = minutes_to_time_str(p_window_end) if p_window_end > 0 else "Anytime"
+             
+             ws.cell(row=row_num, column=1, value=p_id).border = border
+             ws.cell(row=row_num, column=2, value=p_weight).border = border
+             ws.cell(row=row_num, column=3, value=p_service).border = border
+             ws.cell(row=row_num, column=4, value=p_window_end_str).border = border
+             
+             # Center align all
+             for c in range(1, 5):
+                 ws.cell(row=row_num, column=c).alignment = Alignment(horizontal="center")
+             
+             row_num += 1
+        
+        row_num += 2 # Space between shift blocks
+
     # ========================================
     # CREATE UNASSIGNED PARCELS SHEET
     # ========================================

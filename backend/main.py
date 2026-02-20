@@ -30,6 +30,7 @@ load_dotenv()
 async def lifespan(app: FastAPI):
     """Initialize database tables on startup"""
     try:
+        print("\n🚀 BACKEND STARTING - VERSION 4 (ROBUST PARSING)")
         conn = get_db_connection()
         cur = conn.cursor()
         # Only create the unassigned_parcels table if it doesn't exist
@@ -43,7 +44,7 @@ async def lifespan(app: FastAPI):
                 latitude DOUBLE PRECISION,
                 longitude DOUBLE PRECISION,
                 parcel_weight INTEGER,
-                window_end INTEGER,
+                window_end TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
@@ -82,6 +83,43 @@ warehouse_config = {
     "latitude": 19.0760,  # Mumbai default
     "longitude": 72.8777
 }
+
+# Shift logic for time windows
+SHIFTS = [(420, 600), (600, 1080), (1080, 1260)]  # 07:00-10:00, 10:00-18:00, 18:00-21:00
+
+def parse_window_end(val):
+    """Parse HH:MM:SS string to minutes from midnight"""
+    try:
+        if val is None or pd.isna(val):
+            return 600
+        val_str = str(val).strip()
+        if ':' in val_str:
+            parts = val_str.split(':')
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            return hours * 60 + minutes
+        
+        # If it's a digit string, parse as int
+        if val_str.isdigit():
+            return int(val_str)
+            
+        # If it's a float string ending in .0, parse as float then int
+        try:
+            return int(float(val_str))
+        except:
+            pass
+            
+        return 600  # Default: 10:00
+    except Exception as e:
+        # print(f"Error parsing window_end {val}: {e}")
+        return 600  # Default: 10:00
+
+def get_shift_start(window_end_minutes):
+    """Auto-assign window_start to the start of the matching shift"""
+    for shift_start, shift_end in SHIFTS:
+        if window_end_minutes <= shift_end:
+            return shift_start
+    return SHIFTS[-1][0]  # Fallback: last shift
 
 # Vehicle colors for visualization
 VEHICLE_COLORS = [
@@ -133,7 +171,7 @@ async def upload_file(file: UploadFile = File(...)):
         df = pd.read_csv(io.BytesIO(contents))
         
         # Validate required columns
-        required_base_columns = ['id', 'parcel_weight', 'service_time']
+        required_base_columns = ['id', 'parcel_weight', 'service_time', 'window_end']
         missing_columns = [col for col in required_base_columns if col not in df.columns]
         
         if missing_columns:
@@ -204,11 +242,18 @@ async def upload_file(file: UploadFile = File(...)):
         # Store in global variable
         uploaded_data = df
         
+        
+        # Convert window_end and compute window_start
+        uploaded_data['window_end_minutes'] = uploaded_data['window_end'].apply(parse_window_end)
+        uploaded_data['window_start'] = uploaded_data['window_end_minutes'].apply(get_shift_start)
+        
+        print(f"✓ Parsed window_end (HH:MM:SS → minutes) and auto-assigned window_start from shifts")
+        
         # Prepare response data - exclude technical/geocoding columns
         # Users don't need to see: latitude, longitude, window_start, formatted_address, geocode_confidence, geocode_source
         # window_end is kept visible as it shows the requested delivery time
         # These are used internally by the VRP solver but not shown in UI
-        exclude_columns = ['latitude', 'longitude', 'window_start', 'formatted_address', 'geocode_confidence', 'geocode_source']
+        exclude_columns = ['latitude', 'longitude', 'window_start', 'window_end_minutes', 'formatted_address', 'geocode_confidence', 'geocode_source']
         display_columns = [col for col in df.columns if col not in exclude_columns]
         display_data = df[display_columns].to_dict(orient='records')
         
@@ -225,6 +270,8 @@ async def upload_file(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 
@@ -239,6 +286,10 @@ async def update_data(update: DataUpdate):
         # Convert updated data to DataFrame
         updated_df = pd.DataFrame(update.data)
         
+        # Ensure 24-hour time is parsed to minutes
+        if 'window_end' in updated_df.columns:
+            updated_df['window_end_minutes'] = updated_df['window_end'].apply(parse_window_end)
+        
         print(f"Updated data columns: {list(updated_df.columns)}")
         print(f"Original data columns: {list(uploaded_data.columns) if uploaded_data is not None else 'None'}")
         
@@ -246,7 +297,7 @@ async def update_data(update: DataUpdate):
         # Only update user-editable columns
         if uploaded_data is not None and len(uploaded_data) > 0:
             # Columns that should be preserved from original data
-            preserve_columns = ['latitude', 'longitude', 'window_start', 'formatted_address', 
+            preserve_columns = ['latitude', 'longitude', 'window_start', 'window_end_minutes', 'formatted_address', 
                               'geocode_confidence', 'geocode_source']
             
             # Start with updated data
@@ -284,6 +335,8 @@ async def update_data(update: DataUpdate):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Error updating data: {str(e)}")
         print(f"Error type: {type(e)}")
         raise HTTPException(status_code=500, detail=f"Error updating data: {str(e)}")
@@ -353,6 +406,12 @@ async def compute_routes():
         
         # Step 2: Insert stations
         print("\n[Step 2/5] Inserting stations from dataframe...")
+        # DEBUG PRINTS
+        print(f"DEBUG: uploaded_data columns: {uploaded_data.columns.tolist()}")
+        if len(uploaded_data) > 0:
+            print(f"DEBUG: first row window_end: {uploaded_data.iloc[0].get('window_end')}")
+            print(f"DEBUG: first row window_end_minutes: {uploaded_data.iloc[0].get('window_end_minutes')}")
+        
         insert_stations_from_dataframe(conn, uploaded_data)
         print("✓ Stations inserted")
         
@@ -379,10 +438,16 @@ async def compute_routes():
         )
         
     except Exception as e:
+        import traceback
+        tb_str = traceback.format_exc()
         print(f"\n❌ ERROR during computation: {str(e)}")
         print(f"Error type: {type(e).__name__}")
-        import traceback
-        print(f"Traceback:\n{traceback.format_exc()}")
+        print(f"Traceback:\n{tb_str}")
+        
+        # Write to file so I can read it
+        with open("traceback.txt", "w") as f:
+            f.write(tb_str)
+            
         raise HTTPException(status_code=500, detail=f"Error during computation: {str(e)}")
 
 
@@ -429,18 +494,18 @@ async def get_results():
         parcels = []
         total_cost = 0
         
-        # Vehicle shift times (10 vehicles)
+        # Vehicle shift times (10 vehicles) — minutes from midnight, matching vrp_solver.py
         vehicle_shifts = [
-            ("06:00 AM", 720),  # V1: 6 AM - 6 PM
-            ("07:00 AM", 840),  # V2: 7 AM - 9 PM
-            ("06:00 AM", 780),  # V3: 6 AM - 8 PM
-            ("08:00 AM", 720),  # V4: 8 AM - 8 PM
-            ("07:00 AM", 720),  # V5: 7 AM - 7 PM
-            ("06:00 AM", 660),  # V6: 6 AM - 6 PM
-            ("08:00 AM", 840),  # V7: 8 AM - 9 PM
-            ("07:00 AM", 780),  # V8: 7 AM - 8 PM
-            ("07:00 AM", 720),  # V9: 7 AM - 7 PM
-            ("08:00 AM", 780)   # V10: 8 AM - 8 PM
+            (540, 1080),   # V1: 09:00 - 18:00
+            (540, 1080),   # V2: 09:00 - 18:00
+            (420, 900),    # V3: 07:00 - 15:00
+            (420, 1080),   # V4: 07:00 - 18:00
+            (540, 1020),   # V5: 09:00 - 17:00
+            (480, 1080),   # V6: 08:00 - 18:00
+            (480, 1260),   # V7: 08:00 - 21:00
+            (420, 1200),   # V8: 07:00 - 20:00
+            (420, 1140),   # V9: 07:00 - 19:00
+            (480, 1200)    # V10: 08:00 - 20:00
         ]
         
         # Vehicle costs per km (10 vehicles)
@@ -492,37 +557,20 @@ async def get_results():
                 if r["properties"]["vehicle_id"] == vehicle_id
             ]
             
-            # Get shift times
-            clock_in, work_mins = vehicle_shifts[vehicle_id - 1]
-            
-            # Calculate clock out time
-            clock_in_hour = int(clock_in.split(":")[0])
-            clock_in_min = int(clock_in.split(":")[1].split()[0])
-            clock_in_period = clock_in.split()[1]
-            
-            # Convert to 24-hour
-            if clock_in_period == "PM" and clock_in_hour != 12:
-                clock_in_hour += 12
-            elif clock_in_period == "AM" and clock_in_hour == 12:
-                clock_in_hour = 0
-            
-            total_mins = clock_in_hour * 60 + clock_in_min + work_mins
-            clock_out_hour = (total_mins // 60) % 24
-            clock_out_min = total_mins % 60
-            clock_out_period = "AM" if clock_out_hour < 12 else "PM"
-            display_hour = clock_out_hour if clock_out_hour <= 12 else clock_out_hour - 12
-            if display_hour == 0:
-                display_hour = 12
-            clock_out = f"{display_hour:02d}:{clock_out_min:02d} {clock_out_period}"
+            # Get shift times (minutes from midnight)
+            shift_start, shift_end = vehicle_shifts[vehicle_id - 1]
+            clock_in = f"{shift_start // 60:02d}:{shift_start % 60:02d}"
+            clock_out = f"{shift_end // 60:02d}:{shift_end % 60:02d}"
+            work_mins = shift_end - shift_start
             
             vehicles.append({
                 "vehicle_id": vehicle_id,
                 "total_distance": float(vehicle["total_km"]),
                 "total_weight": int(vehicle["total_weight_kg"]),
-                "total_deliveries": int(vehicle["parcel_count"]),  # Use parcel_count from DB
+                "total_deliveries": int(vehicle["parcel_count"]),
                 "cost": round(cost, 2),
                 "stations": vehicle_stations,
-                "route_geometry": vehicle_routes,  # Changed from 'routes' to match frontend
+                "route_geometry": vehicle_routes,
                 "capacity": vehicle_capacities[vehicle_id - 1],
                 "utilization": round((int(vehicle["total_weight_kg"]) / vehicle_capacities[vehicle_id - 1]) * 100, 1),
                 "work_duration": work_mins,
@@ -560,10 +608,10 @@ async def get_results():
         
     except Exception as e:
         conn.rollback()  # Rollback failed transaction
+        import traceback
         print(f"\n❌ ERROR retrieving results: {str(e)}")
         print(f"Error type: {type(e).__name__}")
-        import traceback
-        print(f"Traceback:\n{traceback.format_exc()}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error retrieving results: {str(e)}")
 
 

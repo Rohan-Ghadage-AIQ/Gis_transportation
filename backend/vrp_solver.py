@@ -37,7 +37,7 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     node_demands = [0] + [s['parcel_weight'] for s in stations]
     station_ids = [None] + [s['station_id'] for s in stations]
     node_service_times = [0] + [s['service_time'] for s in stations]
-    node_windows = [(0, 480)] + [(s['window_start'], s['window_end']) for s in stations]
+    node_windows = [(420, 1260)] + [(s['window_start'], s['window_end']) for s in stations]
     
     # CRITICAL VALIDATION: Ensure no NULL nodes in system
     if None in nodes_in_system:
@@ -79,15 +79,15 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     vehicle_capacities = [175, 261, 348, 156, 178, 142, 118, 125, 200, 180]
     vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10, 12, 14]
     vehicle_times = [
-        (120, 660), (120, 660),  # V1, V2: 9 AM - 6 PM
-        (0, 480),                # V3: 7 AM - 3 PM
-        (0, 660),                # V4: 7 AM - 6 PM
-        (120, 600),              # V5: 9 AM - 5 PM
-        (60, 660),               # V6: 8 AM - 6 PM
-        (60, 840),               # V7: 8 AM - 9 PM
-        (0, 780),                # V8: 7 AM - 8 PM
-        (0, 720),                # V9: 7 AM - 7 PM
-        (60, 780)                # V10: 8 AM - 8 PM
+        (540, 1080), (540, 1080),  # V1, V2: 09:00 - 18:00
+        (420, 900),                # V3: 07:00 - 15:00
+        (420, 1080),               # V4: 07:00 - 18:00
+        (540, 1020),               # V5: 09:00 - 17:00
+        (480, 1080),               # V6: 08:00 - 18:00
+        (480, 1260),               # V7: 08:00 - 21:00
+        (420, 1200),               # V8: 07:00 - 20:00
+        (420, 1140),               # V9: 07:00 - 19:00
+        (480, 1200)                # V10: 08:00 - 20:00
     ]
     
     # Create routing model
@@ -209,11 +209,12 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     
     # Helper function for time formatting
     def min_to_clock(minutes):
-        base_time = datetime.datetime.combine(datetime.date.today(), datetime.time(7, 0))
-        target_time = base_time + datetime.timedelta(minutes=float(minutes))
-        if target_time.date() > base_time.date():
-            return target_time.strftime("%I:%M %p (+1 Day)")
-        return target_time.strftime("%I:%M %p")
+        """Convert minutes from midnight to 24-hour HH:MM format"""
+        hours = int(minutes) // 60
+        mins = int(minutes) % 60
+        if hours >= 24:
+            return f"{hours - 24:02d}:{mins:02d} (+1 Day)"
+        return f"{hours:02d}:{mins:02d}"
     
     # Prepare results
     cur.execute("CREATE TABLE IF NOT EXISTS vector.route_geometries (vehicle_id integer, geom geometry);")
@@ -241,11 +242,11 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
             deadline = node_windows[node_idx][1]
             arrival_min = solution.Min(time_dimension.CumulVar(index))
             
-            status = "IDEAL"
+            status = "IN_BUFFER"
             if arrival_min <= (deadline - 60):
-                status = "IDEAL"
+                status = "IN_BUFFER"
             elif arrival_min <= deadline:
-                status = "IN BUFFER"
+                status = "ON TIME"
             else:
                 status = "LATE"
             

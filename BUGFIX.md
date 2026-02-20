@@ -173,3 +173,43 @@ for i in range(size):
 - All **10 vehicles** are utilized (previously only 6)
 - No more "MISSING distance matrix entries" warnings
 - Stations sharing the same road node are handled correctly
+
+---
+
+# Bug Fix: Delivery Report Status Logic & Formatting
+
+## Problem
+
+1. **Shift Timings Discrepancy**: The Excel report showed default 6 AM - 6 PM shifts for all vehicles, contradicting the actual solver configuration (e.g., Vehicle 1 starts at 09:00).
+2. **Confusing "IN BUFFER" Status**: Parcels delivered within the last hour of their window were labeled "IN BUFFER", which was confusing alongside "ON TIME".
+3. **Disordered Report**: The rows in the Excel report were not sorted chronologically, making it hard to track the route.
+
+## Fix Applied
+
+### Fix 1: Synced Vehicle Shifts
+Updated `report_generator.py` to use the exact vehicle shift definitions from `vrp_solver.py`.
+- **Before**: Hardcoded default list.
+- **After**: Synced list matches solver (e.g., V1: 09:00 - 18:00).
+
+### Fix 2: Refined Status Logic
+Changed the logic for "IN BUFFER" vs "ON TIME" to be more intuitive:
+- **ON TIME**: Delivery is within the window (0-59 mins early).
+- **IN BUFFER**: Delivery is significantly early (> 1 hour early).
+- **LATE**: Delivery is after the window end.
+
+### Fix 3: Chronological Sorting
+Updated the SQL query in `report_generator.py` to sort by `Arrival Time`.
+```sql
+ORDER BY s.vehicle_id, s.arrival_time
+```
+
+### Fix 4: Shift-Wise Summary
+Added a new section at the bottom of the report to group parcels by their assigned shift (e.g., 07:00-10:00, 10:00-18:00), making it easy to verify shift adherence.
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/report_generator.py` | Updated shift definitions, status logic, sorting, and added summary section |
+| `backend/vrp_solver.py` | Updated internal status string to match report terminology |
+
