@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -451,6 +453,120 @@ async def compute_routes():
         raise HTTPException(status_code=500, detail=f"Error during computation: {str(e)}")
 
 
+def get_all_results_data(conn):
+    """Helper to fetch all routing results from database and format for frontend"""
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        # Fetch summary
+        # Note: fetch_results_summary uses station_node_map and route_geometries
+        summary_data = fetch_results_summary(conn)
+        
+        # Fetch all station status/arrival data
+        # IMPORTANT: Use dict-like row access (RealDictCursor)
+        cur.execute("SELECT station_id, ST_X(geom) as lon, ST_Y(geom) as lat, vehicle_id, parcel_weight, arrival_time, delivery_status FROM vector.station_node_map")
+        stations_data = cur.fetchall()
+        
+        # Fetch route geometries
+        route_geojson = fetch_route_geometries_geojson(conn)
+        
+        # Fetch undelivered parcels
+        cur.execute("SELECT station_id, latitude, longitude FROM vector.unassigned_parcels ORDER BY station_id")
+        undelivered_data = cur.fetchall()
+        
+        # Vehicle configuration - Must match solver
+        vehicle_shifts = [
+            (540, 1080), (540, 1080), (420, 900), (420, 1080), (540, 1020),
+            (480, 1080), (480, 1260), (420, 1200), (420, 1140), (480, 1200)
+        ]
+        vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10, 12, 14]
+        vehicle_capacities = [175, 261, 348, 156, 178, 142, 118, 125, 200, 180]
+        
+        vehicles = []
+        parcels = []
+        total_cost = 0
+        
+        for vehicle in summary_data["vehicles"]:
+            vehicle_id = vehicle["vehicle_id"]
+            
+            # Filter stations for this vehicle
+            v_stations = [
+                {
+                    "station_id": str(s['station_id']),
+                    "lat": float(s['lat']),
+                    "lon": float(s['lon']),
+                    "arrival_time": s['arrival_time'] if s['arrival_time'] else "N/A",
+                    "status": s['delivery_status'] if s['delivery_status'] else "UNKNOWN"
+                }
+                for s in stations_data if s['vehicle_id'] == vehicle_id
+            ]
+            
+            if not v_stations:
+                continue
+                
+            # For each assigned station, add to global parcels list for map
+            for s in stations_data:
+                if s['vehicle_id'] == vehicle_id:
+                    parcels.append({
+                        "station_id": str(s['station_id']),
+                        "lat": float(s['lat']),
+                        "lon": float(s['lon']),
+                        "vehicle_id": vehicle_id,
+                        "color": VEHICLE_COLORS[vehicle_id - 1] if vehicle_id <= len(VEHICLE_COLORS) else "#888888"
+                    })
+            
+            dist_km = float(vehicle["total_km"])
+            v_cost = dist_km * vehicle_costs_per_km[vehicle_id - 1]
+            total_cost += v_cost
+            
+            # Map geometry
+            v_geometry = [f for f in route_geojson["features"] if f["properties"]["vehicle_id"] == vehicle_id]
+            
+            # Shift details
+            s_start, s_end = vehicle_shifts[vehicle_id - 1]
+            
+            vehicles.append({
+                "vehicle_id": vehicle_id,
+                "total_distance": dist_km,
+                "total_weight": int(vehicle["total_weight_kg"]),
+                "total_deliveries": int(vehicle["parcel_count"]),
+                "cost": round(v_cost, 2),
+                "stations": v_stations,
+                "route_geometry": v_geometry,
+                "capacity": vehicle_capacities[vehicle_id - 1],
+                "utilization": round((int(vehicle["total_weight_kg"]) / vehicle_capacities[vehicle_id - 1]) * 100, 1),
+                "work_duration": s_end - s_start,
+                "color": VEHICLE_COLORS[vehicle_id - 1] if vehicle_id <= len(VEHICLE_COLORS) else "#888888",
+                "clock_in": f"{s_start // 60:02d}:{s_start % 60:02d}",
+                "clock_out": f"{s_end // 60:02d}:{s_end % 60:02d}"
+            })
+            
+        return {
+            "vehicles": vehicles,
+            "summary": {
+                "total_distance": float(summary_data["total_distance_km"]),
+                "total_cost": round(total_cost, 2),
+                "total_parcels": summary_data["total_deliveries"],
+                "total_fleets": summary_data["total_vehicles"],
+                "warehouse": {
+                    "lat": warehouse_config["latitude"],
+                    "lon": warehouse_config["longitude"],
+                    "name": "Warehouse"
+                }
+            },
+            "parcels": parcels,
+            "undelivered_parcels": [
+                {
+                    "station_id": str(s['station_id']),
+                    "lat": float(s['latitude']),
+                    "lon": float(s['longitude'])
+                }
+                for s in undelivered_data
+            ]
+        }
+    finally:
+        cur.close()
+
+
 @app.get("/api/results")
 async def get_results():
     """
@@ -637,6 +753,31 @@ async def download_report():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating report: {str(e)}")
+
+
+@app.post("/api/refresh-traffic")
+async def refresh_traffic():
+    """Trigger a re-solve with live traffic data and return reroute info"""
+    try:
+        # 1. Re-run VRP with live traffic (solve_vrp creates & closes its own conn)
+        solve_results = solve_vrp(warehouse_config["longitude"], warehouse_config["latitude"])
+        
+        # 2. Fetch all results using a fresh DB connection
+        result_conn = get_db_connection()
+        try:
+            data = get_all_results_data(result_conn)
+        finally:
+            result_conn.close()
+        
+        # 3. Inject reroute info from the solve
+        if "rerouted_vehicles" in solve_results:
+            data["rerouted_vehicles"] = solve_results["rerouted_vehicles"]
+            
+        return JSONResponse(content=data)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

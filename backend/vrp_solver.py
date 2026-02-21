@@ -1,21 +1,31 @@
-import datetime
+import os
+from typing import Dict, Any, List
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
-from typing import List, Dict, Any, Tuple
+
+from traffic_service import traffic_service
 from database import (
     get_db_connection,
     get_warehouse_node,
     fetch_station_data,
     fetch_distance_matrix,
-    save_route_geometry
+    save_route_geometry,
+    update_road_traffic_factor,
+    reset_traffic_factors,
+    get_current_route_states
 )
+
 
 def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) -> Dict[str, Any]:
     """
     Solve the Vehicle Routing Problem with time windows and capacity constraints.
     Returns a dictionary with solution details including routes, costs, and statistics.
+    Includes 'rerouted_vehicles' if traffic caused changes.
     """
     conn = get_db_connection()
+    # 0. Capture current state for delta detection
+    old_states = get_current_route_states(conn)
+    
     cur = conn.cursor()
     
     # Fetch station data
@@ -25,6 +35,49 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         conn.close()
         return {"success": False, "error": "No station data found"}
     
+    # --- LIVE TRAFFIC UPDATE via TomTom ---
+    tomtom_key = os.getenv("TOMTOM_API_KEY", "")
+    if tomtom_key:
+        # Reset all traffic factors to 1.0 before fresh sync
+        reset_traffic_factors(conn)
+        print("🚦 Syncing live traffic from TomTom...")
+        print("   ┌─────────┬──────────────────────┬─────────┬──────────────────┐")
+        print("   │ Station │ Location             │ Factor  │ Status           │")
+        print("   ├─────────┼──────────────────────┼─────────┼──────────────────┤")
+        tried = 0
+        updated = 0
+        try:
+            # Sample up to 15 stations to stay within API limits
+            for s in stations[:15]:
+                tried += 1
+                factor = traffic_service.get_station_traffic_factor(
+                    s['latitude'], s['longitude']
+                )
+                if factor != 1.0:
+                    update_road_traffic_factor(
+                        conn, s['latitude'], s['longitude'], factor, radius_km=1.5
+                    )
+                    updated += 1
+                    # Show severity
+                    if factor >= 2.0:
+                        severity = "🔴 HEAVY"
+                    elif factor >= 1.5:
+                        severity = "🟠 MODERATE"
+                    elif factor >= 1.2:
+                        severity = "🟡 LIGHT"
+                    else:
+                        severity = "🟢 FREE FLOW"
+                    print(f"   │ {s['station_id']:>7} │ {s['latitude']:>9.4f},{s['longitude']:>9.4f} │ {factor:>6.2f}x │ {severity:<16} │")
+                else:
+                    print(f"   │ {s['station_id']:>7} │ {s['latitude']:>9.4f},{s['longitude']:>9.4f} │  1.00x │ 🟢 FREE FLOW     │")
+            print("   └─────────┴──────────────────────┴─────────┴──────────────────┘")
+            print(f"   ✅ Live traffic sync complete — {updated}/{tried} zones have congestion.")
+        except Exception as e:
+            print(f"⚠️ Traffic sync failed, using static costs: {e}")
+    else:
+        print("ℹ️ TOMTOM_API_KEY not set — using static road costs.")
+    # ---------------------------
+
     # Get depot (warehouse) node
     depot_node = get_warehouse_node(conn, warehouse_lon, warehouse_lat)
     
@@ -33,10 +86,12 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         return {"success": False, "error": "Could not find warehouse node"}
     
     # Build node mappings
+    # Warehouse loading time: vehicles spend 10 minutes at depot loading parcels
+    WAREHOUSE_LOADING_MINUTES = 10
     nodes_in_system = [depot_node] + [s['nearest_node_id'] for s in stations]
     node_demands = [0] + [s['parcel_weight'] for s in stations]
     station_ids = [None] + [s['station_id'] for s in stations]
-    node_service_times = [0] + [s['service_time'] for s in stations]
+    node_service_times = [WAREHOUSE_LOADING_MINUTES] + [s['service_time'] for s in stations]
     node_windows = [(420, 1260)] + [(s['window_start'], s['window_end']) for s in stations]
     
     # CRITICAL VALIDATION: Ensure no NULL nodes in system
@@ -74,7 +129,7 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     # idx_to_node mapping (for route geometry saving)
     idx_to_node = {i: nodes_in_system[i] for i in range(size)}
     
-    # Vehicle configuration - Increased to 10 vehicles to handle all deliveries
+    # Vehicle configuration - 10 vehicles
     num_vehicles = 10
     vehicle_capacities = [175, 261, 348, 156, 178, 142, 118, 125, 200, 180]
     vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10, 12, 14]
@@ -98,8 +153,14 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     def time_callback(from_idx, to_idx):
         from_node = manager.IndexToNode(from_idx)
         to_node = manager.IndexToNode(to_idx)
-        travel_time = dist_matrix[from_node][to_node] / 666
-        return int(travel_time + node_service_times[from_node])
+        travel_time = dist_matrix[from_node][to_node] / 666  # meters → minutes at ~40 km/h
+        # Use round() instead of int() to avoid truncating short trips to 0.
+        # Enforce minimum 1 minute travel between any two DIFFERENT nodes.
+        if from_node != to_node:
+            travel_minutes = max(1, round(travel_time))
+        else:
+            travel_minutes = 0
+        return travel_minutes + node_service_times[from_node]
     
     time_callback_index = routing.RegisterTransitCallback(time_callback)
     
@@ -107,7 +168,7 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     max_shift = max(end for _, end in vehicle_times)
     routing.AddDimension(
         time_callback_index,
-        60,   # slack
+        60,         # slack
         max_shift,  # Max across all vehicle shifts
         False,
         'Time'
@@ -115,7 +176,7 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     time_dimension = routing.GetDimensionOrDie('Time')
     
     # Apply time windows
-    # Parcel deadlines are SOFT constraints — late delivery is preferred over dropping
+    # Parcel deadlines are SOFT constraints — late delivery preferred over dropping
     for i in range(1, size):
         index = manager.NodeToIndex(i)
         ws, deadline = node_windows[i]
@@ -176,29 +237,15 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     capacity_dimension = routing.GetDimensionOrDie('Capacity')
     for i in range(num_vehicles):
         index = routing.End(i)
-        # Relax soft capacity bounds to allow slight overloading if needed
         capacity_dimension.SetCumulVarSoftUpperBound(index, 300, 500)
     
-    # Solve with optimized parameters for speed
+    # Solve with optimized parameters
     search_params = pywrapcp.DefaultRoutingSearchParameters()
-    
-    # Use SAVINGS strategy - faster than PARALLEL_CHEAPEST_INSERTION
-    # Builds routes by iteratively merging routes that save the most distance
     search_params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.SAVINGS
-    
-    # Use GUIDED_LOCAL_SEARCH for refinement (good balance of speed vs quality)
     search_params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    
-    # Increase time limit from 30s to 60s for better solutions
     search_params.time_limit.seconds = 60
-    
-    # Add solution limit - stop if we find a good solution early
     search_params.solution_limit = 200
-    
-    # Limit LNS (Large Neighborhood Search) time for faster local search
     search_params.lns_time_limit.seconds = 5
-    
-    # Log search progress (optional - can be disabled in production)
     search_params.log_search = False
     
     solution = routing.SolveWithParameters(search_params)
@@ -216,7 +263,7 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
             return f"{hours - 24:02d}:{mins:02d} (+1 Day)"
         return f"{hours:02d}:{mins:02d}"
     
-    # Prepare results
+    # Prepare results tables
     cur.execute("CREATE TABLE IF NOT EXISTS vector.route_geometries (vehicle_id integer, geom geometry);")
     cur.execute("ALTER TABLE vector.station_node_map ADD COLUMN IF NOT EXISTS vehicle_id integer;")
     cur.execute("ALTER TABLE vector.station_node_map ADD COLUMN IF NOT EXISTS arrival_time text;")
@@ -242,7 +289,6 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
             deadline = node_windows[node_idx][1]
             arrival_min = solution.Min(time_dimension.CumulVar(index))
             
-            status = "IN_BUFFER"
             if arrival_min <= (deadline - 60):
                 status = "IN_BUFFER"
             elif arrival_min <= deadline:
@@ -257,7 +303,6 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
                     "status": status
                 })
                 
-                # Store arrival time and status in database
                 cur.execute("""
                     UPDATE vector.station_node_map 
                     SET vehicle_id = %s,
@@ -311,14 +356,12 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     # ========================================
     # POST-SOLUTION VALIDATION
     # ========================================
-    # Verify no parcel is scheduled outside its vehicle's operating hours
     for route in routes:
         v_id = route["vehicle_id"]
         v_start, v_end = vehicle_times[v_id - 1]
         v_start_clock = min_to_clock(v_start)
         v_end_clock = min_to_clock(v_end)
         for stop in route["stops"]:
-            # Parse arrival time back to compare
             arrival_str = stop["arrival_time"]
             print(f"  ✅ V{v_id} [{v_start_clock}-{v_end_clock}] → "
                   f"Parcel {stop['station_id']} arrives {arrival_str} ({stop['status']})")
@@ -328,7 +371,6 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     # ========================================
     # RECORD UNASSIGNED PARCELS
     # ========================================
-    # Find parcels that were NOT assigned to any vehicle
     cur.execute("""
         INSERT INTO vector.unassigned_parcels (station_id, reason, latitude, longitude, parcel_weight, window_end)
         SELECT 
@@ -345,15 +387,26 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     unassigned_count = cur.rowcount
     if unassigned_count > 0:
         print(f"\n⚠️  WARNING: {unassigned_count} parcels could not be assigned to any vehicle!")
-        print(f"These parcels exceeded capacity/time/distance constraints.\n")
     conn.commit()
     
     cur.close()
     conn.close()
     
+    # --- REROUTE DETECTION ---
+    rerouted_vehicles = []
+    for route in routes:
+        v_id = int(route["vehicle_id"])
+        new_seq = [stop["station_id"] for stop in route["stops"]]
+        old_seq = old_states.get(v_id, [])
+        
+        if old_seq and new_seq != old_seq:
+            rerouted_vehicles.append(v_id)
+            print(f"🔄 Vehicle {v_id} REROUTED due to updated traffic conditions.")
+
     return {
         "success": True,
         "routes": routes,
         "total_vehicles_used": len(routes),
-        "total_deliveries": sum(len(r['stops']) for r in routes)
+        "total_deliveries": sum(len(r['stops']) for r in routes),
+        "rerouted_vehicles": rerouted_vehicles
     }

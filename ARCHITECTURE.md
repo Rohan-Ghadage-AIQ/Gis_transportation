@@ -55,6 +55,12 @@ Backend fetches geometries → Frontend displays on map
 │  │ - Endpoints  │  │ - PostGIS    │  │ - VRP Logic  │      │
 │  │ - CORS       │  │ - pgRouting  │  │ - Constraints│      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                    ┌──────────────┐                         │
+│                    │traffic_svc.py│                         │
+│                    │              │                         │
+│                    │ - TomTom API │                         │
+│                    │ - Congestion │                         │
+│                    └──────────────┘                         │
 │         │                  │                  │              │
 │         └──────────────────┴──────────────────┘              │
 │                            │                                 │
@@ -147,18 +153,26 @@ Backend fetches geometries → Frontend displays on map
                               └──────────────────┘
                                      │
                                      ▼
-                              ┌──────────────────┐
-                              │ pgRouting        │
-                              │ Calculate        │
-                              │ Distance Matrix  │
-                              └──────────────────┘
+                               ┌──────────────────┐
+                               │ pgRouting        │
+                               │ Calculate        │
+                               │ Distance Matrix  │
+                               │ (with live_cost) │
+                               └──────────────────┘
                                      │
                                      ▼
-                              ┌──────────────────┐
-                              │ vrp_solver.py    │
-                              │ OR-Tools VRP     │
-                              │ Optimization     │
-                              └──────────────────┘
+                               ┌──────────────────┐
+                               │ TomTom Traffic   │
+                               │ Sync congestion  │
+                               │ per delivery zone│
+                               └──────────────────┘
+                                     │
+                                     ▼
+                               ┌──────────────────┐
+                               │ vrp_solver.py    │
+                               │ OR-Tools VRP     │
+                               │ Optimization     │
+                               └──────────────────┘
                                      │
                                      ▼
                               ┌──────────────────┐
@@ -209,13 +223,13 @@ def solve_vrp(conn):
 
 #### Step 4: Generate Route Geometries
 ```python
-# database.py - generate_route_geometries()
-def generate_route_geometries(conn):
-    # For each vehicle:
-    #   1. Get ordered stations
-    #   2. Use pgr_dijkstra for each segment
-    #   3. Combine into MultiLineString
-    #   4. Store in route_geometries table
+# database.py - save_route_geometry()
+def save_route_geometry(conn, vehicle_id, route_nodes):
+    # For each vehicle, saves per-stop-pair segments:
+    #   1. Each stop-pair gets its own geometry row
+    #   2. Each row includes segment_index and avg_traffic_factor
+    #   3. Traffic factor = AVG(road_maharashtra.traffic_factor) along segment
+    #   4. Enables per-segment color-coding on the map
 ```
 
 ### 3. Results Phase
@@ -423,19 +437,30 @@ async def update_data(data: List[dict]):
 async def compute_routes():
     """
     1. Insert data to database
-    2. Calculate distance matrix
-    3. Solve VRP
-    4. Generate route geometries
-    5. Return status
+    2. Calculate distance matrix (with live_cost from traffic)
+    3. Sync TomTom traffic for delivery zones
+    4. Solve VRP
+    5. Generate per-segment route geometries with traffic factors
+    6. Return status
     """
 
 @app.get("/api/results")
 async def get_results():
     """
     1. Fetch vehicle assignments
-    2. Fetch route geometries
+    2. Fetch per-segment route geometries with traffic colors
     3. Calculate statistics
     4. Return complete results
+    """
+
+@app.post("/api/refresh-traffic")
+async def refresh_traffic():
+    """
+    1. Re-query TomTom for live traffic data
+    2. Update road_maharashtra.traffic_factor + live_cost_s
+    3. Re-solve VRP with updated costs
+    4. Detect rerouted vehicles
+    5. Return updated results + reroute info
     """
 ```
 
@@ -462,6 +487,7 @@ def calculate_distance_matrix(conn):
     Calculate distances between all stations
     
     Uses: pgr_dijkstra(road_network, start, end)
+    Cost column: COALESCE(live_cost_s, cost_s)  -- prefers traffic-adjusted cost
     Stores: distance_matrix table
     Format: (from_id, to_id, distance_km, duration_min)
     """
@@ -485,9 +511,15 @@ def fetch_route_geometries_geojson(conn):
     Fetch routes as GeoJSON for frontend
     
     Returns: GeoJSON FeatureCollection
-    Each feature:
+    Each feature (one per stop-pair segment):
     - geometry: MultiLineString
-    - properties: {vehicle_id, distance_km}
+    - properties: {vehicle_id, segment_index, traffic_factor, traffic_color}
+    
+    Traffic colors:
+    - #22C55E (green)  — free flow (≤1.1×)
+    - #EAB308 (yellow) — light (1.1×–1.5×)
+    - #F97316 (orange) — moderate (1.5×–2.0×)
+    - #DC2626 (red)    — heavy (>2.0×)
     """
 ```
 
@@ -502,14 +534,19 @@ def solve_vrp(conn):
     
     Steps:
     1. Fetch distance matrix from database
-    2. Create routing model
-    3. Add constraints:
+    2. Reset traffic factors to baseline
+    3. Query TomTom for live traffic per delivery zone
+    4. Update road costs: traffic_factor + live_cost_s
+    5. Create routing model
+    6. Add constraints:
        - Vehicle capacity (118-348 kg)
        - Time windows (7 AM - 9 PM)
        - Service times (10 min per stop)
-    4. Set objective: Minimize longest route
-    5. Solve with first solution strategy
-    6. Update database with assignments
+       - Warehouse loading time (10 min)
+    7. Set objective: Minimize longest route
+    8. Solve with first solution strategy
+    9. Update database with assignments
+    10. Detect rerouted vehicles (vs previous solution)
     """
 ```
 
@@ -616,23 +653,21 @@ Minimize: max(distance of all vehicle routes)
 for each vehicle:
     route = [warehouse] + ordered_stations + [warehouse]
     
-    geometries = []
     for i in range(len(route) - 1):
         start = route[i]
         end = route[i + 1]
         
-        # Get path from pgRouting
+        # Get path from pgRouting (uses live_cost_s if available)
         path = pgr_dijkstra(start, end)
         
-        # Get road geometries
+        # Get road geometries + average traffic factor
         geom = get_road_geometries(path)
-        geometries.append(geom)
-    
-    # Combine into MultiLineString
-    route_geom = ST_Collect(geometries)
-    
-    # Store in database
-    INSERT INTO route_geometries (vehicle_id, route_geom)
+        avg_tf = AVG(road.traffic_factor for road in path)
+        
+        # Store as individual segment row
+        INSERT INTO route_geometries
+            (vehicle_id, segment_index, geom, avg_traffic_factor)
+        VALUES (v_id, i, geom, avg_tf)
 ```
 
 ## 🗄️ Database Operations
@@ -661,17 +696,19 @@ for each vehicle:
 │ source (Node)       │  │ to_station_id       │
 │ target (Node)       │  │ distance_km         │
 │ cost (Distance)     │  │ duration_min        │
-│ geom (LineString)   │  └─────────────────────┘
+│ traffic_factor      │  └─────────────────────┘
+│ live_cost_s         │
+│ geom (LineString)   │
 └─────────────────────┘
          │
          ▼
 ┌─────────────────────┐
 │ route_geometries    │
 │ ─────────────────── │
-│ id (PK)             │
 │ vehicle_id          │
-│ route_geom (MLS)    │
-│ total_distance_km   │
+│ segment_index       │
+│ geom (Geometry)     │
+│ avg_traffic_factor  │
 └─────────────────────┘
 ```
 
@@ -813,8 +850,8 @@ async def upload_file(file: UploadFile):
 ### Scalability Limits
 
 - **Stations**: Tested up to 100 delivery points
-- **Vehicles**: Configured for 8 vehicles
-- **Computation Time**: 1-3 minutes for 50-100 stations
+- **Vehicles**: Configured for 10 vehicles
+- **Computation Time**: ~40s for 50-100 stations (with traffic sync)
 - **Map Performance**: Smooth rendering up to 500 route segments
 
 ## 🐛 Common Issues & Solutions
@@ -845,13 +882,13 @@ async def upload_file(file: UploadFile):
 
 ### Overview
 
-The system includes automatic geocoding to convert addresses to coordinates using Nominatim (OpenStreetMap's geocoding service).
+The system includes automatic geocoding to convert addresses to coordinates using Ola Maps API (primary) with Nominatim (OpenStreetMap) as fallback.
 
 ### Geocoding Workflow
 
 ```
 CSV with addresses → Backend detects 'address' column → 
-Nominatim API calls → Coordinates added → Data stored with metadata
+Ola Maps API calls (with Nominatim fallback) → Coordinates added → Data stored with metadata
 ```
 
 ### Implementation Details
@@ -997,7 +1034,105 @@ useEffect(() => {
 
 ---
 
-### 2. 📊 Unassigned Parcels Reporting
+### 3. Live Traffic Integration (TomTom)
+
+**Feature**: Real-time traffic congestion data from TomTom adjusts road costs before VRP solving. Routes are optimized using live travel times, not just static map distances.
+
+**Location**: Backend `traffic_service.py` + `vrp_solver.py` + `database.py`
+
+**How It Works**:
+1. Before solving VRP, `reset_traffic_factors()` clears all road costs to baseline
+2. For each delivery zone, TomTom Flow Segment Data API v4 is queried
+3. The API returns `freeFlowSpeed` and `currentSpeed` → `factor = free / current`
+4. `update_road_traffic_factor()` updates `traffic_factor` and `live_cost_s` on nearby roads
+5. pgRouting uses `COALESCE(live_cost_s, cost_s)` — prefers traffic-adjusted cost
+6. The VRP solver uses these updated costs for route optimization
+
+**Traffic Factor Interpretation**:
+- `1.0` — Road is at free flow speed (no congestion)
+- `1.5` — Road is 50% slower than normal
+- `2.0` — Road is at half its normal speed (heavy traffic)
+
+**API Configuration**:
+```env
+TOMTOM_API_KEY=your_api_key  # in backend/.env
+```
+
+**Technical Implementation**:
+
+#### traffic_service.py
+```python
+class TomTomTrafficService:
+    def get_traffic_factor(self, lat, lon) -> float:
+        """
+        Query TomTom Flow Segment Data API v4
+        Returns: freeFlowSpeed / currentSpeed (≥1.0)
+        Falls back to 1.0 on API error
+        """
+
+    def get_station_traffic_factor(self, station_lat, station_lon,
+                                    warehouse_lat, warehouse_lon) -> float:
+        """Get traffic factor for a station's delivery zone"""
+```
+
+#### database.py — Road Cost Updates
+```python
+def update_road_traffic_factor(conn, lat, lon, factor, radius_km=2.0):
+    """
+    Update traffic_factor + live_cost_s for roads near a point.
+    live_cost_s = cost_s × factor
+    """
+
+def reset_traffic_factors(conn):
+    """Reset all roads to factor=1.0, live_cost_s=NULL"""
+```
+
+---
+
+### 4. 🗺️ Live Traffic Visualization on Map
+
+**Feature**: Vehicle route segments are color-coded by real-time congestion level.
+
+**Location**: Map legend (top-right), with ON/OFF toggle
+
+**Color Coding**:
+| Color | Level | Traffic Factor |
+|-------|-------|----------------|
+| 🟢 Green  | Free Flow | ≤ 1.1× |
+| 🟡 Yellow | Light     | 1.1×–1.5× |
+| 🟠 Orange | Moderate  | 1.5×–2.0× |
+| 🔴 Red    | Heavy     | > 2.0× |
+
+**How It Works**:
+1. **Backend**: `save_route_geometry()` saves each stop-pair as a separate row with `avg_traffic_factor`
+2. **Backend**: `fetch_route_geometries_geojson()` maps factor → color and includes `traffic_color` in GeoJSON properties
+3. **Frontend**: `MapView.tsx` reads `traffic_color` per segment and sets `line-color` accordingly
+4. When traffic factor = 1.0 (free flow), segments stay in vehicle's assigned color
+5. Congested segments (factor > 1.5) render thicker (7px vs 5px) for emphasis
+
+**Toggle**: Users can switch traffic colors ON/OFF in the map legend panel
+
+---
+
+### 5. Realistic Arrival Times
+
+**Feature**: Vehicles account for warehouse loading time and accurate travel time rounding.
+
+**Problem Solved**: Previously, a vehicle starting at 07:00 could show a parcel arriving at exactly 07:00 — implying instant loading and teleportation.
+
+**Fixes Applied** (in `vrp_solver.py`):
+
+1. **Warehouse Loading Time** — `WAREHOUSE_LOADING_MINUTES = 10`
+   - Added as the depot's service time
+   - Vehicles spend 10 minutes loading parcels before departing
+
+2. **Travel Time Rounding** — `max(1, round(travel_time))`
+   - Short trips (e.g. 400m) used to truncate to 0 minutes via `int()`
+   - Now correctly rounds and enforces minimum 1-minute travel between nodes
+
+**Result**: First delivery is always ≥ 11 minutes after vehicle start time (10 min loading + ≥ 1 min travel).
+
+### 2. Unassigned Parcels Reporting
 
 **Feature**: Dedicated Excel sheet showing parcels that couldn't be assigned to any vehicle, with detailed reasons.
 

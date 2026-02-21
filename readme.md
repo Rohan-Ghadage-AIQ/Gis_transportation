@@ -1,6 +1,6 @@
 # 🚚 Vehicle Routing Optimization System
 
-A full-stack web application for optimizing vehicle routing with real-time visualization, built with React, FastAPI, PostgreSQL/PostGIS, and pgRouting .
+A full-stack web application for optimizing vehicle routing with **live traffic integration**, real-time visualization, and delivery fleet management — built with React, FastAPI, PostgreSQL/PostGIS, pgRouting, and TomTom Traffic API.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
@@ -29,22 +29,27 @@ A full-stack web application for optimizing vehicle routing with real-time visua
 
 This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP) with time windows and capacity constraints for logistics operations in Maharashtra, India. The system:
 
-- **Optimizes** delivery routes using Google OR-Tools
+- **Optimizes** delivery routes for 10 vehicles using Google OR-Tools
+- **Integrates** real-time traffic data from TomTom to adjust route costs
 - **Calculates** actual road distances using pgRouting on OpenStreetMap data
-- **Visualizes** routes on an interactive map with color-coded vehicle paths
+- **Visualizes** routes on an interactive map with traffic-colored segments (🟢🟡🟠🔴)
 - **Manages** vehicle capacity, time windows, and service times
+- **Models** realistic departure times with warehouse loading buffers
 - **Provides** real-time statistics and route analytics
 
 ### Key Capabilities
 
-- Upload delivery data via CSV/Excel with automatic geocoding
+- Upload delivery data via CSV/Excel with automatic geocoding (Ola Maps + Nominatim fallback)
 - Edit parcel details (weight, time windows, service time)
 - Configure warehouse location
 - Compute optimal routes with capacity and time constraints
+- **🆕 Live traffic-aware routing** via TomTom Flow Segment Data API
+- **🆕 Refresh Traffic** — re-query congestion and re-solve VRP on demand
+- **🆕 Traffic visualization** — color-coded route segments by congestion level
 - View routes on interactive map with actual road geometries
 - Track vehicle utilization, costs, and schedules
 - Download formatted Excel reports with delivery details
-- Identify undelivered parcels
+- Identify undelivered parcels with detailed reasons
 
 ## ✨ Features
 
@@ -52,14 +57,14 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 
 #### 1. Upload & Data Management
 - **Drag-and-Drop Upload**: Modern file upload interface supporting CSV and Excel formats
-- **Automatic Geocoding**: Converts addresses to coordinates using Nominatim (OpenStreetMap)
+- **Automatic Geocoding**: Converts addresses to coordinates using Ola Maps API (with Nominatim/OpenStreetMap fallback)
 - **Editable Data Table**: Interactive table with inline editing for all delivery parameters
 - **Data Validation**: Real-time validation of uploaded data
 - **Warehouse Configuration**: Set custom warehouse location (default: Mumbai)
 
 #### 2. Route Visualization
 - **Interactive Map**: MapTiler-powered map with zoom, pan, and marker interactions
-- **Color-Coded Routes**: 8 distinct colors for up to 8 vehicles
+- **Color-Coded Routes**: 10 distinct colors for up to 10 vehicles
 - **Road-Based Paths**: Actual road geometries from pgRouting (not straight lines)
 - **Direction Arrows**: Visual indicators showing route direction
 - **Enhanced Visibility**: Darker, thicker route lines for better clarity
@@ -67,6 +72,13 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
   - Click checkboxes in legend to show/hide specific routes
   - "Show All" / "Hide All" buttons for bulk control
   - Synchronized route and marker visibility
+- **🆕 Live Traffic Visualization**: Per-segment congestion coloring on vehicle routes
+  - 🟢 Green — Free flow (traffic factor ≤ 1.1×)
+  - 🟡 Yellow — Light congestion (1.1×–1.5×)
+  - 🟠 Orange — Moderate congestion (1.5×–2.0×)
+  - 🔴 Red — Heavy congestion (> 2.0×)
+  - ON/OFF toggle in map legend
+  - Congested segments render thicker (7px) for emphasis
 
 #### 3. Statistics Dashboard
 - **Summary Cards**: Total distance, cost, parcels, and active fleets
@@ -95,12 +107,15 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 - `POST /api/compute` - Trigger route optimization
 - `GET /api/results` - Retrieve optimized routes and statistics
 - `GET /api/download-report` - Download Excel report with delivery details
+- **🆕** `POST /api/refresh-traffic` - Re-query TomTom traffic, re-solve VRP, detect reroutes
 
 #### Optimization Engine
 - **OR-Tools VRP Solver**: Capacity and time window constraints
 - **pgRouting Integration**: Real-world distance matrix calculation
 - **Database Operations**: PostgreSQL/PostGIS for spatial data
-- **Route Geometry**: MultiLineString geometries for actual road paths
+- **Route Geometry**: Per-segment MultiLineString geometries with traffic factors
+- **🆕 TomTom Traffic Service**: Real-time congestion data for delivery zones
+- **🆕 Realistic Time Modeling**: 10-min warehouse loading buffer + accurate travel time rounding
 
 ## 🛠️ Technology Stack
 
@@ -137,7 +152,8 @@ GisTransportation4/
 ├── backend/
 │   ├── main.py                 # FastAPI application
 │   ├── database.py             # PostgreSQL operations
-│   ├── vrp_solver.py           # OR-Tools VRP solver
+│   ├── vrp_solver.py           # OR-Tools VRP solver + traffic sync
+│   ├── traffic_service.py      # TomTom Traffic API client
 │   ├── report_generator.py     # Excel report generation
 │   ├── requirements.txt        # Python dependencies
 │   ├── .env                    # Environment variables (not in git)
@@ -229,6 +245,10 @@ DB_PORT=5432
 HOST=0.0.0.0
 PORT=8000
 FRONTEND_URL=http://localhost:5173
+
+# API Keys
+TOMTOM_API_KEY=your_tomtom_api_key           # Live traffic data (https://developer.tomtom.com/)
+KRUTRIM_API_KEY=your_ola_maps_api_key        # Geocoding (Ola Maps)
 ```
 
 ### Frontend Configuration
@@ -420,15 +440,24 @@ CREATE TABLE vector.station_node_map (
 
 ### vector.route_geometries
 
-Stores computed route paths as MultiLineString geometries.
+Stores per-segment route paths with traffic data for color-coded visualization.
 
 ```sql
 CREATE TABLE vector.route_geometries (
-    id SERIAL PRIMARY KEY,
     vehicle_id INTEGER,
-    route_geom GEOMETRY(MultiLineString, 4326),
-    total_distance_km NUMERIC
+    segment_index INTEGER DEFAULT 0,        -- Stop-pair order (0, 1, 2...)
+    geom GEOMETRY,                          -- Road geometry for this segment
+    avg_traffic_factor REAL DEFAULT 1.0     -- TomTom congestion factor (1.0 = free flow)
 );
+```
+
+### vector.road_maharashtra (traffic columns)
+
+```sql
+-- Added by update_schema_traffic.sql
+ALTER TABLE vector.road_maharashtra 
+    ADD COLUMN IF NOT EXISTS traffic_factor DOUBLE PRECISION DEFAULT 1.0,
+    ADD COLUMN IF NOT EXISTS live_cost_s DOUBLE PRECISION;  -- cost_s × traffic_factor
 ```
 
 ## 🎨 Color Scheme
@@ -445,7 +474,7 @@ Vehicle routes use distinct colors for easy identification:
 | Vehicle 6 | Yellow | #F7DC6F |
 | Vehicle 7 | Purple | #BB8FCE |
 | Vehicle 8 | Light Blue | #85C1E2 |
-
+![Frontend](image.png)
 ## 🚀 Deployment
 
 ### Backend Deployment
@@ -471,31 +500,12 @@ Deploy the `dist/` folder to:
 - AWS S3 + CloudFront
 - Any static hosting service
 
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - **Google OR-Tools** for the VRP solver
 - **pgRouting** for road network routing
 - **MapTiler** for map visualization
 - **OpenStreetMap** contributors for road data
+- **TomTom** for real-time traffic data API
+- **Ola Maps (Krutrim)** for geocoding API
 
-## 📞 Support
-
-For issues, questions, or contributions, please open an issue on GitHub.
-
----
-
-**Built with ❤️ for optimizing logistics operations**

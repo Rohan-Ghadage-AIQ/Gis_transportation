@@ -22,18 +22,9 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ results }) => {
                                 {summary.total_distance.toFixed(2)} km
                             </p>
                         </div>
-                        <svg
-                            className="w-12 h-12 text-blue-300"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-                            />
+                        <svg className="w-12 h-12 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                         </svg>
                     </div>
                 </div>
@@ -46,18 +37,9 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ results }) => {
                                 ₹{summary.total_cost.toFixed(2)}
                             </p>
                         </div>
-                        <svg
-                            className="w-12 h-12 text-green-300"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
+                        <svg className="w-12 h-12 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     </div>
                 </div>
@@ -70,18 +52,9 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ results }) => {
                                 {summary.total_parcels}
                             </p>
                         </div>
-                        <svg
-                            className="w-12 h-12 text-purple-300"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                            />
+                        <svg className="w-12 h-12 text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                         </svg>
                     </div>
                 </div>
@@ -94,18 +67,9 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ results }) => {
                                 {summary.total_fleets}
                             </p>
                         </div>
-                        <svg
-                            className="w-12 h-12 text-orange-300"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"
-                            />
+                        <svg className="w-12 h-12 text-orange-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
                         </svg>
                     </div>
                 </div>
@@ -129,6 +93,11 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ results }) => {
                                     <span className="text-white font-semibold">
                                         Vehicle {vehicle.vehicle_id}
                                     </span>
+                                    {results.rerouted_vehicles?.includes(vehicle.vehicle_id) && (
+                                        <span className="ml-3 px-2 py-0.5 bg-amber-500 text-white text-[10px] font-bold rounded-full animate-pulse">
+                                            REROUTED
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="flex items-center space-x-4 text-sm">
                                     <span className="text-gray-400">
@@ -213,11 +182,13 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ results }) => {
                                             <div className="flex items-center space-x-2">
                                                 <span className="text-gray-400">{station.arrival_time}</span>
                                                 <span
-                                                    className={`px-2 py-1 rounded text-xs ${station.status === 'IDEAL'
-                                                        ? 'bg-green-500/20 text-green-400'
-                                                        : station.status === 'IN BUFFER'
-                                                            ? 'bg-yellow-500/20 text-yellow-400'
-                                                            : 'bg-red-500/20 text-red-400'
+                                                    className={`px-2 py-1 rounded text-xs ${station.status === 'ON TIME'
+                                                            ? 'bg-green-500/20 text-green-400'
+                                                            : station.status === 'IN_BUFFER'
+                                                                ? 'bg-blue-500/20 text-blue-400'
+                                                                : station.status === 'LATE'
+                                                                    ? 'bg-red-500/20 text-red-400'
+                                                                    : 'bg-gray-500/20 text-gray-400'
                                                         }`}
                                                 >
                                                     {station.status}

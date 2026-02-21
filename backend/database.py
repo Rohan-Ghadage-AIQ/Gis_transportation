@@ -74,11 +74,9 @@ def safe_int(val, default=0):
         if val is None: return default
         val_str = str(val).strip()
         if ':' in val_str:
-            # print(f"DEBUG: Found colon in '{val_str}', splitting...")
             parts = val_str.split(':')
             try:
                 res = int(parts[0]) * 60 + int(parts[1])
-                # print(f"DEBUG: Successfully parsed '{val_str}' to {res}")
                 return res
             except Exception as e:
                 print(f"DEBUG: Failed to parse clock string '{val_str}': {e}")
@@ -90,12 +88,10 @@ def safe_int(val, default=0):
         try:
             return int(float(val_str))
         except:
-            # Final attempt: just try int() and see what it says
             try:
-                # This is likely where the error message comes from if it's not caught
                 return int(val_str)
             except Exception as e:
-                if val_str: # only print if not empty
+                if val_str:
                     print(f"DEBUG: safe_int could not parse '{val_str}', returning default {default}. Error: {e}")
                 return default
     except:
@@ -120,27 +116,16 @@ def insert_stations_from_dataframe(conn, df: pd.DataFrame, warehouse_lon: float 
     inserted_count = 0
     for i, row in df.iterrows():
         try:
-            # print(f"DEBUG: Processing row {i}")
             station_id = str(row['id'])
             lat = float(row['latitude'])
             lon = float(row['longitude'])
             
-            # Use safe_int for ALL numeric columns
-            # print(f"DEBUG: Parsing weight from {row.get('parcel_weight')}")
             weight = safe_int(row.get('parcel_weight'), 20)
-            
-            # print(f"DEBUG: Parsing service_time from {row.get('service_time')}")
             service_time = safe_int(row.get('service_time'), 10)
-            
-            # print(f"DEBUG: Parsing window_start from {row.get('window_start')}")
             window_start = safe_int(row.get('window_start'), 420)
-            
-            # Handle window_end (HH:MM:SS or minutes)
             raw_we = row.get('window_end_minutes', row.get('window_end', 600))
-            # print(f"DEBUG: Parsing window_end from {raw_we}")
             window_end = safe_int(raw_we, 600)
             
-            # Insert with snapping
             cur.execute("""
                 INSERT INTO vector.station_node_map (station_id, nearest_node_id, parcel_weight, service_time, window_start, window_end, geom)
                 SELECT 
@@ -207,7 +192,7 @@ def calculate_distance_matrix(conn, warehouse_lon: float = 72.8724, warehouse_la
         INSERT INTO vector.distance_matrix (start_vid, end_vid, agg_cost)
         SELECT start_vid, end_vid, agg_cost
         FROM pgr_dijkstraCost(
-            'SELECT gid AS id, source, target, cost FROM vector.road_maharashtra',
+            'SELECT gid AS id, source, target, COALESCE(live_cost_s, cost_s) AS cost FROM vector.road_maharashtra WHERE live_cost_s IS NOT NULL OR cost_s IS NOT NULL',
             %s::bigint[],
             %s::bigint[],
             directed := false
@@ -256,37 +241,92 @@ def fetch_distance_matrix(conn, node_ids: List[int]) -> Dict[Tuple[int, int], fl
     return {(int(row[0]), int(row[1])): float(row[2]) for row in rows}
 
 def save_route_geometry(conn, vehicle_id: int, route_nodes: List[int]):
+    """Save route geometry per stop-pair segment with traffic factor.
+    
+    Each segment (stop A → stop B) is saved as a separate row so the
+    frontend can color-code by congestion level.
+    """
     cur = conn.cursor()
     cur.execute("DELETE FROM vector.route_geometries WHERE vehicle_id = %s", (vehicle_id,))
     if len(route_nodes) < 2:
         cur.close()
         return
-    segments = [(route_nodes[i], route_nodes[i+1]) for i in range(len(route_nodes) - 1)]
-    start_nodes = [s[0] for s in segments]
-    end_nodes = [s[1] for s in segments]
+    
+    # Ensure the table has the traffic columns (idempotent)
     cur.execute("""
-        INSERT INTO vector.route_geometries (vehicle_id, geom)
-        SELECT %s, ST_Multi(ST_Collect(geom ORDER BY seq))
-        FROM (
-            SELECT UNNEST(%s::bigint[]) as start_node, UNNEST(%s::bigint[]) as end_node
-        ) AS segments
-        CROSS JOIN LATERAL (
-            SELECT geom, seq
-            FROM pgr_dijkstra('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra', segments.start_node, segments.end_node, false) AS di
+        ALTER TABLE vector.route_geometries 
+        ADD COLUMN IF NOT EXISTS segment_index integer DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS avg_traffic_factor real DEFAULT 1.0;
+    """)
+    
+    for seg_idx in range(len(route_nodes) - 1):
+        start_node = route_nodes[seg_idx]
+        end_node = route_nodes[seg_idx + 1]
+        if start_node == end_node:
+            continue
+        cur.execute("""
+            INSERT INTO vector.route_geometries (vehicle_id, segment_index, geom, avg_traffic_factor)
+            SELECT 
+                %s,
+                %s,
+                ST_Multi(ST_Collect(ro.geom ORDER BY di.seq)),
+                COALESCE(AVG(ro.traffic_factor), 1.0)
+            FROM pgr_dijkstra(
+                'SELECT gid AS id, source, target, COALESCE(live_cost_s, cost_s) AS cost 
+                 FROM vector.road_maharashtra 
+                 WHERE live_cost_s IS NOT NULL OR cost_s IS NOT NULL',
+                %s, %s, false
+            ) AS di
             JOIN vector.road_maharashtra ro ON di.edge = ro.gid
-        ) AS route_geoms
-        WHERE geom IS NOT NULL
-        HAVING ST_Collect(geom ORDER BY seq) IS NOT NULL;
-    """, (vehicle_id, start_nodes, end_nodes))
+            WHERE ro.geom IS NOT NULL
+            HAVING ST_Collect(ro.geom ORDER BY di.seq) IS NOT NULL;
+        """, (vehicle_id, seg_idx, start_node, end_node))
+    
     conn.commit()
     cur.close()
 
 def fetch_route_geometries_geojson(conn) -> Dict[str, Any]:
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT vehicle_id, ST_AsGeoJSON(geom)::json as geometry FROM vector.route_geometries ORDER BY vehicle_id")
-    features = [{"type": "Feature", "properties": {"vehicle_id": r['vehicle_id']}, "geometry": r['geometry']} for r in cur.fetchall()]
+    # Ensure traffic columns exist (safe for old data created before schema change)
+    cur.execute("""
+        ALTER TABLE vector.route_geometries 
+        ADD COLUMN IF NOT EXISTS segment_index integer DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS avg_traffic_factor real DEFAULT 1.0;
+    """)
+    conn.commit()
+    cur.execute("""
+        SELECT vehicle_id, segment_index,
+               COALESCE(avg_traffic_factor, 1.0) as traffic_factor,
+               ST_AsGeoJSON(geom)::json as geometry 
+        FROM vector.route_geometries 
+        ORDER BY vehicle_id, segment_index
+    """)
+    features = []
+    for r in cur.fetchall():
+        tf = float(r.get('traffic_factor', 1.0))
+        # Map traffic factor to color
+        if tf >= 2.0:
+            traffic_color = "#DC2626"   # Red - heavy
+        elif tf >= 1.5:
+            traffic_color = "#F97316"   # Orange - moderate
+        elif tf >= 1.1:
+            traffic_color = "#EAB308"   # Yellow - light
+        else:
+            traffic_color = "#22C55E"   # Green - free flow
+        
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "vehicle_id": r['vehicle_id'],
+                "segment_index": r.get('segment_index', 0),
+                "traffic_factor": round(tf, 2),
+                "traffic_color": traffic_color
+            },
+            "geometry": r['geometry']
+        })
     cur.close()
     return {"type": "FeatureCollection", "features": features}
+
 
 def fetch_results_summary(conn) -> Dict[str, Any]:
     cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -300,3 +340,69 @@ def fetch_results_summary(conn) -> Dict[str, Any]:
     vehicles = [dict(row) for row in cur.fetchall()]
     cur.close()
     return {"vehicles": vehicles, "total_vehicles": len(vehicles), "total_deliveries": sum(v['parcel_count'] for v in vehicles), "total_distance_km": sum(v['total_km'] for v in vehicles)}
+
+def update_road_traffic_factor(conn, lat: float, lon: float, factor: float, radius_km: float = 2.0):
+    """
+    Update traffic_factor for roads within a radius of a point.
+    Then recalculate live_cost_s.
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE vector.road_maharashtra 
+            SET traffic_factor = %s,
+                live_cost_s = cost_s * %s,
+                live_reverse_cost_s = reverse_cost_s * %s,
+                last_traffic_update = NOW()
+            WHERE ST_DWithin(
+                geom::geography, 
+                ST_SetSRID(ST_Point(%s, %s), 4326)::geography, 
+                %s * 1000
+            )
+        """, (factor, factor, factor, lon, lat, radius_km))
+        conn.commit()
+    except Exception as e:
+        print(f"❌ Error updating traffic factor in DB: {e}")
+        conn.rollback()
+    finally:
+        cur.close()
+
+def reset_traffic_factors(conn):
+    """Reset all traffic factors to 1.0"""
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE vector.road_maharashtra 
+            SET traffic_factor = 1.0,
+                live_cost_s = cost_s,
+                live_reverse_cost_s = reverse_cost_s,
+                last_traffic_update = NULL;
+        """)
+        conn.commit()
+    except Exception as e:
+        print(f"❌ Error resetting traffic factors: {e}")
+        conn.rollback()
+    finally:
+        cur.close()
+
+def get_current_route_states(conn) -> Dict[int, List[int]]:
+    """
+    Get current sequence of station IDs for each vehicle.
+    Returns: {vehicle_id: [station_id1, station_id2, ...]}
+    """
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT vehicle_id, station_id 
+        FROM vector.station_node_map 
+        WHERE vehicle_id IS NOT NULL 
+        ORDER BY vehicle_id, arrival_time
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    
+    states: Dict[int, List] = {}
+    for vid, sid in rows:
+        if vid not in states:
+            states[vid] = []
+        states[vid].append(sid)
+    return states

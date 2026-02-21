@@ -47,4 +47,10 @@ export const apiService = {
         const response = await api.get<RouteResults>('/api/results');
         return response.data;
     },
+
+    // Refresh traffic and re-solve
+    async refreshTraffic(): Promise<RouteResults> {
+        const response = await api.post<RouteResults>('/api/refresh-traffic');
+        return response.data;
+    },
 };

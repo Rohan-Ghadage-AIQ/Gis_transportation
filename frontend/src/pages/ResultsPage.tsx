@@ -9,7 +9,9 @@ export const ResultsPage: React.FC = () => {
     const navigate = useNavigate();
     const [results, setResults] = useState<RouteResults | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string>('');
+    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'warning' } | null>(null);
 
     useEffect(() => {
         const fetchResults = async () => {
@@ -30,6 +32,34 @@ export const ResultsPage: React.FC = () => {
 
         fetchResults();
     }, [navigate]);
+
+    const handleRefreshTraffic = async () => {
+        setIsRefreshing(true);
+        setNotification(null);
+        try {
+            const data = await apiService.refreshTraffic();
+            setResults(data);
+
+            if (data.rerouted_vehicles && data.rerouted_vehicles.length > 0) {
+                setNotification({
+                    message: `Traffic update: ${data.rerouted_vehicles.length} vehicles rerouted for better efficiency.`,
+                    type: 'warning'
+                });
+            } else {
+                setNotification({
+                    message: "Traffic data updated. Current routes remain optimal.",
+                    type: 'success'
+                });
+            }
+
+            // Clear notification after 5 seconds
+            setTimeout(() => setNotification(null), 5000);
+        } catch (err: any) {
+            setError(err.response?.data?.detail || 'Failed to refresh traffic');
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -67,7 +97,18 @@ export const ResultsPage: React.FC = () => {
     }
 
     return (
-        <div className="h-screen flex flex-col bg-gray-900">
+        <div className="h-screen flex flex-col bg-gray-900 overflow-hidden relative">
+            {/* Notification Toast */}
+            {notification && (
+                <div className={`fixed top-20 right-6 z-50 animate-bounce shadow-2xl rounded-lg px-6 py-4 flex items-center ${notification.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-green-500 text-white'
+                    }`}>
+                    <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="font-semibold">{notification.message}</span>
+                </div>
+            )}
+
             {/* Header */}
             <div className="bg-gray-800 shadow-lg px-6 py-4 flex items-center justify-between">
                 <div>
@@ -79,6 +120,26 @@ export const ResultsPage: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex gap-3">
+                    <button
+                        onClick={handleRefreshTraffic}
+                        disabled={isRefreshing}
+                        className={`${isRefreshing ? 'bg-gray-600' : 'bg-indigo-600 hover:bg-indigo-700'
+                            } text-white px-6 py-2 rounded-lg transition-colors flex items-center`}
+                    >
+                        {isRefreshing ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                                Syncing...
+                            </>
+                        ) : (
+                            <>
+                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                Refresh Traffic
+                            </>
+                        )}
+                    </button>
                     <button
                         onClick={() => {
                             const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';

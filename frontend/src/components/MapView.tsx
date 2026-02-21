@@ -16,6 +16,9 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
         new Set(results.vehicles.map(v => v.vehicle_id))
     );
 
+    // Toggle traffic color mode
+    const [showTrafficColors, setShowTrafficColors] = useState(true);
+
     // Toggle vehicle visibility
     const toggleVehicleVisibility = (vehicleId: number) => {
         setVisibleVehicles(prev => {
@@ -68,10 +71,15 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
 
                 // Add route line from GeoJSON geometry
                 if (vehicle.route_geometry && vehicle.route_geometry.length > 0) {
-                    // vehicle.route_geometry is an array of GeoJSON features
-                    // Each feature has a MultiLineString geometry
                     vehicle.route_geometry.forEach((feature: any, idx: number) => {
                         if (!map.current) return;
+
+                        // Determine segment color: use traffic color if enabled, else vehicle color
+                        const trafficFactor = feature?.properties?.traffic_factor ?? 1.0;
+                        const trafficColor = feature?.properties?.traffic_color ?? '#22C55E';
+                        const segmentColor = (showTrafficColors && trafficFactor > 1.0)
+                            ? trafficColor
+                            : vehicle.color;
 
                         // Add source for this route segment
                         map.current.addSource(`route-${vehicle.vehicle_id}-${idx}`, {
@@ -79,7 +87,7 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
                             data: feature
                         });
 
-                        // Add layer to display the route with arrows
+                        // Add layer to display the route
                         map.current.addLayer({
                             id: `route-${vehicle.vehicle_id}-${idx}`,
                             type: 'line',
@@ -89,8 +97,8 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
                                 'line-cap': 'round',
                             },
                             paint: {
-                                'line-color': vehicle.color,
-                                'line-width': 5,
+                                'line-color': segmentColor,
+                                'line-width': trafficFactor > 1.5 ? 7 : 5,
                                 'line-opacity': 0.95,
                             },
                         });
@@ -163,7 +171,7 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
             map.current?.remove();
             map.current = null;
         };
-    }, [results]);
+    }, [results, showTrafficColors]);
 
     // Control layer and marker visibility based on visibleVehicles state
     useEffect(() => {
@@ -247,10 +255,46 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
                         </label>
                     ))}
                 </div>
+
+                {/* Warehouse Legend */}
                 <div className="mt-3 pt-3 border-t border-gray-200">
                     <div className="flex items-center text-sm">
                         <div className="w-4 h-4 rounded-full bg-red-600 mr-2" />
                         <span className="text-gray-700">Warehouse</span>
+                    </div>
+                </div>
+
+                {/* Traffic Legend */}
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-gray-900 font-semibold text-sm">Live Traffic</span>
+                        <button
+                            onClick={() => setShowTrafficColors(prev => !prev)}
+                            className={`text-xs px-2 py-0.5 rounded transition-colors ${showTrafficColors
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-500'
+                                }`}
+                        >
+                            {showTrafficColors ? 'ON' : 'OFF'}
+                        </button>
+                    </div>
+                    <div className="space-y-1 text-xs text-gray-600">
+                        <div className="flex items-center">
+                            <div className="w-6 h-2 rounded mr-2" style={{ backgroundColor: '#22C55E' }} />
+                            Free Flow (≤1.1×)
+                        </div>
+                        <div className="flex items-center">
+                            <div className="w-6 h-2 rounded mr-2" style={{ backgroundColor: '#EAB308' }} />
+                            Light (1.1×–1.5×)
+                        </div>
+                        <div className="flex items-center">
+                            <div className="w-6 h-2 rounded mr-2" style={{ backgroundColor: '#F97316' }} />
+                            Moderate (1.5×–2.0×)
+                        </div>
+                        <div className="flex items-center">
+                            <div className="w-6 h-2 rounded mr-2" style={{ backgroundColor: '#DC2626' }} />
+                            Heavy (&gt;2.0×)
+                        </div>
                     </div>
                 </div>
             </div>

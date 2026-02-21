@@ -4,7 +4,7 @@ export interface Station {
     lat: number;
     lon: number;
     arrival_time: string;
-    status: 'IDEAL' | 'IN BUFFER' | 'LATE';
+    status: string; // 'ON TIME', 'IN_BUFFER', or 'LATE'
 }
 
 export interface RouteGeometry {
@@ -17,8 +17,8 @@ export interface VehicleRoute {
     stations: Station[];
     route_geometry: RouteGeometry[];
     total_distance: number;
-    cost: number;  // Changed from total_cost
-    total_weight: number;  // Changed from weight_carried
+    cost: number;
+    total_weight: number;
     capacity: number;
     utilization: number;
     work_duration: number;
@@ -58,6 +58,7 @@ export interface RouteResults {
         lat: number;
         lon: number;
     }>;
+    rerouted_vehicles?: number[];
 }
 
 // Upload Response Types
@@ -72,6 +73,7 @@ export interface UploadResponse {
 export interface ComputeResponse {
     status: string;
     message: string;
+    rerouted_vehicles?: number[];
 }
 
 export interface HealthResponse {
