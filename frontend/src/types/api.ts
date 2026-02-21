@@ -80,3 +80,13 @@ export interface HealthResponse {
     status: string;
     message: string;
 }
+
+// Fleet Vehicle Types
+export interface VehicleConfig {
+    id?: number;
+    name: string;
+    capacity_kg: number;
+    cost_per_km: number;
+    shift_start: number;   // minutes from midnight
+    shift_end: number;
+}

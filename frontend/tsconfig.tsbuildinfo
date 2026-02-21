@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/fleetpanel.tsx","./src/components/mapview.tsx","./src/components/statspanel.tsx","./src/pages/resultspage.tsx","./src/pages/uploadpage.tsx","./src/services/api.ts","./src/types/api.ts"],"version":"5.9.3"}

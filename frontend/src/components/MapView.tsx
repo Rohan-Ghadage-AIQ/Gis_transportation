@@ -19,6 +19,9 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
     // Toggle traffic color mode
     const [showTrafficColors, setShowTrafficColors] = useState(true);
 
+    // Collapsible legend state
+    const [legendOpen, setLegendOpen] = useState(false);
+
     // Toggle vehicle visibility
     const toggleVehicleVisibility = (vehicleId: number) => {
         setVisibleVehicles(prev => {
@@ -124,7 +127,6 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
                     });
                 }
 
-
                 // Add station markers and store references
                 const vehicleMarkers: maptilersdk.Marker[] = [];
                 vehicle.stations.forEach((station, index) => {
@@ -209,94 +211,113 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
     }, [visibleVehicles, results.vehicles]);
 
     return (
-        <div className="relative w-full h-full">
+        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
             <div ref={mapContainer} className="map-container" />
 
-            {/* Legend with Checkboxes */}
-            <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-xs">
-                <h3 className="text-gray-900 font-semibold mb-3">Vehicle Routes</h3>
+            {/* Collapsible Legend */}
+            <div style={{
+                position: 'absolute', top: 16, right: 16,
+                background: 'var(--bg)', borderRadius: 12,
+                boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)',
+                maxWidth: 240, overflow: 'hidden',
+            }}>
+                {/* Toggle header — always visible */}
+                <button
+                    onClick={() => setLegendOpen(prev => !prev)}
+                    style={{
+                        width: '100%', display: 'flex', alignItems: 'center',
+                        justifyContent: 'space-between', padding: '10px 14px',
+                        background: 'none', border: 'none', cursor: 'pointer',
+                    }}
+                >
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                        Vehicle Routes
+                    </span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                        stroke="var(--text-muted)" strokeWidth="2.5"
+                        style={{
+                            transition: 'transform 0.25s ease',
+                            transform: legendOpen ? 'rotate(180deg)' : 'rotate(0)',
+                        }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
 
-                {/* Show All / Hide All Buttons */}
-                <div className="flex gap-2 mb-3">
-                    <button
-                        onClick={() => setVisibleVehicles(new Set(results.vehicles.map(v => v.vehicle_id)))}
-                        className="flex-1 text-xs px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors"
-                    >
-                        Show All
-                    </button>
-                    <button
-                        onClick={() => setVisibleVehicles(new Set())}
-                        className="flex-1 text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
-                    >
-                        Hide All
-                    </button>
-                </div>
+                {/* Collapsible body */}
+                {legendOpen && (
+                    <div style={{ padding: '0 14px 14px' }}>
+                        {/* Show All / Hide All */}
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                            <button
+                                onClick={() => setVisibleVehicles(new Set(results.vehicles.map(v => v.vehicle_id)))}
+                                style={{
+                                    flex: 1, fontSize: 11, padding: '4px 8px', border: 'none', borderRadius: 6,
+                                    background: 'var(--primary-light)', color: 'var(--primary-dark)',
+                                    fontWeight: 600, cursor: 'pointer'
+                                }}>Show All</button>
+                            <button
+                                onClick={() => setVisibleVehicles(new Set())}
+                                style={{
+                                    flex: 1, fontSize: 11, padding: '4px 8px', border: 'none', borderRadius: 6,
+                                    background: 'var(--surface)', color: 'var(--text-muted)',
+                                    fontWeight: 600, cursor: 'pointer'
+                                }}>Hide All</button>
+                        </div>
 
-                {/* Vehicle Checkboxes */}
-                <div className="space-y-2">
-                    {results.vehicles.map((vehicle) => (
-                        <label
-                            key={vehicle.vehicle_id}
-                            className="flex items-center text-sm cursor-pointer hover:bg-gray-50 p-1 rounded transition-colors"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={visibleVehicles.has(vehicle.vehicle_id)}
-                                onChange={() => toggleVehicleVisibility(vehicle.vehicle_id)}
-                                className="mr-2 cursor-pointer"
-                            />
-                            <div
-                                className="w-4 h-4 rounded-full mr-2"
-                                style={{ backgroundColor: vehicle.color }}
-                            />
-                            <span className="text-gray-700">
-                                Vehicle {vehicle.vehicle_id} ({vehicle.stations.length} stops)
-                            </span>
-                        </label>
-                    ))}
-                </div>
+                        {/* Vehicle list */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 220, overflowY: 'auto' }}>
+                            {results.vehicles.map((vehicle) => (
+                                <label key={vehicle.vehicle_id} style={{
+                                    display: 'flex', alignItems: 'center', fontSize: 12,
+                                    cursor: 'pointer', padding: '3px 6px', borderRadius: 6,
+                                }}
+                                    onMouseOver={e => (e.currentTarget.style.background = 'var(--primary-light)')}
+                                    onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
+                                >
+                                    <input type="checkbox"
+                                        checked={visibleVehicles.has(vehicle.vehicle_id)}
+                                        onChange={() => toggleVehicleVisibility(vehicle.vehicle_id)}
+                                        style={{ marginRight: 6, cursor: 'pointer', accentColor: 'var(--primary)' }} />
+                                    <div style={{ width: 10, height: 10, borderRadius: '50%', marginRight: 6, background: vehicle.color, flexShrink: 0 }} />
+                                    <span style={{ color: 'var(--text)' }}>V{vehicle.vehicle_id} ({vehicle.stations.length})</span>
+                                </label>
+                            ))}
+                        </div>
 
-                {/* Warehouse Legend */}
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                    <div className="flex items-center text-sm">
-                        <div className="w-4 h-4 rounded-full bg-red-600 mr-2" />
-                        <span className="text-gray-700">Warehouse</span>
+                        {/* Warehouse */}
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border-light)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', fontSize: 12 }}>
+                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#DC2626', marginRight: 6 }} />
+                                <span style={{ color: 'var(--text)' }}>Warehouse</span>
+                            </div>
+                        </div>
+
+                        {/* Traffic Legend */}
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border-light)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>Live Traffic</span>
+                                <button onClick={() => setShowTrafficColors(prev => !prev)} style={{
+                                    fontSize: 10, padding: '2px 8px', border: 'none', borderRadius: 4, fontWeight: 700, cursor: 'pointer',
+                                    background: showTrafficColors ? 'var(--success-light)' : 'var(--surface)',
+                                    color: showTrafficColors ? '#15803d' : 'var(--text-muted)',
+                                }}>{showTrafficColors ? 'ON' : 'OFF'}</button>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--text-muted)' }}>
+                                {[
+                                    { color: '#22C55E', label: 'Free Flow (≤1.1×)' },
+                                    { color: '#EAB308', label: 'Light (1.1×–1.5×)' },
+                                    { color: '#F97316', label: 'Moderate (1.5×–2.0×)' },
+                                    { color: '#DC2626', label: 'Heavy (>2.0×)' },
+                                ].map(item => (
+                                    <div key={item.color} style={{ display: 'flex', alignItems: 'center' }}>
+                                        <div style={{ width: 18, height: 5, borderRadius: 3, background: item.color, marginRight: 8 }} />
+                                        {item.label}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                {/* Traffic Legend */}
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-gray-900 font-semibold text-sm">Live Traffic</span>
-                        <button
-                            onClick={() => setShowTrafficColors(prev => !prev)}
-                            className={`text-xs px-2 py-0.5 rounded transition-colors ${showTrafficColors
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-gray-100 text-gray-500'
-                                }`}
-                        >
-                            {showTrafficColors ? 'ON' : 'OFF'}
-                        </button>
-                    </div>
-                    <div className="space-y-1 text-xs text-gray-600">
-                        <div className="flex items-center">
-                            <div className="w-6 h-2 rounded mr-2" style={{ backgroundColor: '#22C55E' }} />
-                            Free Flow (≤1.1×)
-                        </div>
-                        <div className="flex items-center">
-                            <div className="w-6 h-2 rounded mr-2" style={{ backgroundColor: '#EAB308' }} />
-                            Light (1.1×–1.5×)
-                        </div>
-                        <div className="flex items-center">
-                            <div className="w-6 h-2 rounded mr-2" style={{ backgroundColor: '#F97316' }} />
-                            Moderate (1.5×–2.0×)
-                        </div>
-                        <div className="flex items-center">
-                            <div className="w-6 h-2 rounded mr-2" style={{ backgroundColor: '#DC2626' }} />
-                            Heavy (&gt;2.0×)
-                        </div>
-                    </div>
-                </div>
+                )}
             </div>
         </div>
     );

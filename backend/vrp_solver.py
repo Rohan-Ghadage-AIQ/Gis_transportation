@@ -129,21 +129,13 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     # idx_to_node mapping (for route geometry saving)
     idx_to_node = {i: nodes_in_system[i] for i in range(size)}
     
-    # Vehicle configuration - 10 vehicles
-    num_vehicles = 10
-    vehicle_capacities = [175, 261, 348, 156, 178, 142, 118, 125, 200, 180]
-    vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10, 12, 14]
-    vehicle_times = [
-        (540, 1080), (540, 1080),  # V1, V2: 09:00 - 18:00
-        (420, 900),                # V3: 07:00 - 15:00
-        (420, 1080),               # V4: 07:00 - 18:00
-        (540, 1020),               # V5: 09:00 - 17:00
-        (480, 1080),               # V6: 08:00 - 18:00
-        (480, 1260),               # V7: 08:00 - 21:00
-        (420, 1200),               # V8: 07:00 - 20:00
-        (420, 1140),               # V9: 07:00 - 19:00
-        (480, 1200)                # V10: 08:00 - 20:00
-    ]
+    # Vehicle configuration — read from database (user-configurable fleet)
+    from database import get_fleet_vehicles
+    fleet = get_fleet_vehicles(conn)
+    num_vehicles = len(fleet)
+    vehicle_capacities = [v['capacity_kg'] for v in fleet]
+    vehicle_costs_per_km = [float(v['cost_per_km']) for v in fleet]
+    vehicle_times = [(v['shift_start'], v['shift_end']) for v in fleet]
     
     # Create routing model
     manager = pywrapcp.RoutingIndexManager(size, num_vehicles, 0)

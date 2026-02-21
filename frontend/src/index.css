@@ -1,17 +1,51 @@
-/* MapTiler SDK Styles */
-
+/* =========================================
+   GIS Transportation — Design System
+   One-place color control via CSS variables
+   ========================================= */
 
 @import "tailwindcss";
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* ── Primary Palette ── */
+  --primary: #5c9ded;
+  --primary-dark: #3a7bd5;
+  --primary-light: #e8f1fd;
+  --primary-hover: #4a8de0;
+
+  /* ── Backgrounds ── */
+  --bg: #ffffff;
+  --surface: #f8fafc;
+  --surface-alt: #f0f5ff;
+
+  /* ── Borders ── */
+  --border: #d6e4f0;
+  --border-light: #e8eff8;
+
+  /* ── Text ── */
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --text-light: #94a3b8;
+
+  /* ── Status / Accents ── */
+  --success: #22c55e;
+  --success-light: #dcfce7;
+  --warning: #f59e0b;
+  --warning-light: #fef3c7;
+  --danger: #ef4444;
+  --danger-light: #fee2e2;
+
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.08), 0 4px 6px rgba(0, 0, 0, 0.04);
+
+  /* ── Typography ── */
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
+  color: var(--text);
+  background-color: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -20,10 +54,10 @@
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
 }
 
 #root {
@@ -31,33 +65,39 @@ body {
   min-height: 100vh;
 }
 
-/* Custom Scrollbar */
+/* ── Scrollbar ── */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1f2937;
+  background: var(--surface);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
+  background: var(--border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+  background: var(--text-light);
 }
 
-/* Loading Spinner */
+/* ── Loading Spinner ── */
 .spinner {
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #3b82f6;
+  border: 3px solid var(--border);
+  border-top: 3px solid var(--primary);
   border-radius: 50%;
   width: 40px;
   height: 40px;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
+}
+
+.spinner-sm {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
 }
 
 @keyframes spin {
@@ -70,30 +110,206 @@ body {
   }
 }
 
-/* Map Container */
+/* ── Map Container ── */
 .map-container {
   width: 100%;
   height: 100%;
   position: relative;
 }
 
-/* Data Table Styles */
+/* ── Data Table ── */
 .data-table {
   @apply w-full border-collapse;
 }
 
 .data-table th {
-  @apply bg-gray-700 text-white px-4 py-2 text-left font-semibold;
+  background: var(--primary);
+  color: #fff;
+  padding: 10px 16px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .data-table td {
-  @apply border border-gray-600 px-4 py-2;
+  border-bottom: 1px solid var(--border-light);
+  padding: 8px 16px;
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.data-table tr:hover td {
+  background: var(--primary-light);
 }
 
 .data-table input {
   @apply w-full bg-transparent border-none outline-none;
+  color: var(--text);
 }
 
 .data-table input:focus {
-  @apply bg-gray-700 rounded px-2;
+  background: var(--surface-alt);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+/* ── Utility: Card ── */
+.card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.card-surface {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+}
+
+/* ── Utility: Button ── */
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.btn-primary:hover {
+  background: var(--primary-dark);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-outline:hover {
+  background: var(--primary-light);
+}
+
+/* ── Badge ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-success {
+  background: var(--success-light);
+  color: #15803d;
+}
+
+.badge-warning {
+  background: var(--warning-light);
+  color: #92400e;
+}
+
+.badge-danger {
+  background: var(--danger-light);
+  color: #b91c1c;
+}
+
+.badge-primary {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+/* ══════════════════════════════════════════════
+   Homepage Animations
+   ══════════════════════════════════════════════ */
+
+/* Floating dots — particles that drift up and fade */
+.floating-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  opacity: 0;
+  animation: floatUp 6s ease-in-out infinite;
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translateY(100vh) scale(0.4);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.25;
+  }
+
+  80% {
+    opacity: 0.12;
+  }
+
+  100% {
+    transform: translateY(-40px) scale(1);
+    opacity: 0;
+  }
+}
+
+/* Animated route lines */
+.route-line {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2.5;
+  stroke-dasharray: 12 8;
+  animation: dashScroll 3s linear infinite;
+}
+
+@keyframes dashScroll {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+
+/* Hero icon pills — entrance animation */
+.hero-icon-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  padding: 7px 16px;
+  animation: pillFadeIn 0.6s ease-out backwards;
+}
+
+@keyframes pillFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }

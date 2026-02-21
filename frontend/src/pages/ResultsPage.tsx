@@ -21,7 +21,6 @@ export const ResultsPage: React.FC = () => {
                 setError('');
             } catch (err: any) {
                 setError(err.response?.data?.detail || 'Failed to load results');
-                // If no results available, redirect back to upload page
                 if (err.response?.status === 400) {
                     setTimeout(() => navigate('/'), 2000);
                 }
@@ -29,7 +28,6 @@ export const ResultsPage: React.FC = () => {
                 setIsLoading(false);
             }
         };
-
         fetchResults();
     }, [navigate]);
 
@@ -51,8 +49,6 @@ export const ResultsPage: React.FC = () => {
                     type: 'success'
                 });
             }
-
-            // Clear notification after 5 seconds
             setTimeout(() => setNotification(null), 5000);
         } catch (err: any) {
             setError(err.response?.data?.detail || 'Failed to refresh traffic');
@@ -63,10 +59,13 @@ export const ResultsPage: React.FC = () => {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="spinner mx-auto mb-4"></div>
-                    <p className="text-white text-lg">Loading results...</p>
+            <div style={{
+                minHeight: '100vh', background: 'var(--bg)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 16 }}>Loading results...</p>
                 </div>
             </div>
         );
@@ -74,67 +73,80 @@ export const ResultsPage: React.FC = () => {
 
     if (error || !results) {
         return (
-            <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-                <div className="text-center">
-                    <svg
-                        className="w-16 h-16 text-red-500 mx-auto mb-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                    </svg>
-                    <p className="text-white text-lg mb-2">{error}</p>
-                    <p className="text-gray-400">Redirecting to upload page...</p>
+            <div style={{
+                minHeight: '100vh', background: 'var(--bg)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{
+                        width: 56, height: 56, borderRadius: '50%', margin: '0 auto 16px',
+                        background: 'var(--danger-light)', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', fontSize: 28
+                    }}>⚠</div>
+                    <p style={{ color: 'var(--text)', fontSize: 16, marginBottom: 4 }}>{error}</p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Redirecting to upload page...</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="h-screen flex flex-col bg-gray-900 overflow-hidden relative">
+        <div style={{
+            height: '100vh', display: 'flex', flexDirection: 'column',
+            background: 'var(--bg)', overflow: 'hidden', position: 'relative'
+        }}>
             {/* Notification Toast */}
             {notification && (
-                <div className={`fixed top-20 right-6 z-50 animate-bounce shadow-2xl rounded-lg px-6 py-4 flex items-center ${notification.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-green-500 text-white'
-                    }`}>
-                    <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span className="font-semibold">{notification.message}</span>
+                <div style={{
+                    position: 'fixed', top: 72, right: 24, zIndex: 50,
+                    padding: '12px 20px', borderRadius: 10,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    boxShadow: 'var(--shadow-lg)', fontWeight: 600, fontSize: 14,
+                    animation: 'slideIn 0.3s ease-out',
+                    ...(notification.type === 'warning'
+                        ? { background: 'var(--warning)', color: '#fff' }
+                        : { background: 'var(--success)', color: '#fff' })
+                }}>
+                    <span style={{ fontSize: 18 }}>{notification.type === 'warning' ? '🔄' : '✓'}</span>
+                    {notification.message}
                 </div>
             )}
 
             {/* Header */}
-            <div className="bg-gray-800 shadow-lg px-6 py-4 flex items-center justify-between">
+            <div style={{
+                padding: '12px 24px', display: 'flex',
+                alignItems: 'center', justifyContent: 'space-between',
+                borderBottom: '1px solid var(--border)',
+                background: 'var(--bg)',
+            }}>
                 <div>
-                    <h1 className="text-2xl font-bold text-white">
+                    <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>
                         Optimized Vehicle Routes
                     </h1>
-                    <p className="text-gray-400 text-sm">
+                    <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
                         {results.summary.total_fleets} vehicles · {results.summary.total_parcels} deliveries
                     </p>
                 </div>
-                <div className="flex gap-3">
+                <div style={{ display: 'flex', gap: 10 }}>
                     <button
                         onClick={handleRefreshTraffic}
                         disabled={isRefreshing}
-                        className={`${isRefreshing ? 'bg-gray-600' : 'bg-indigo-600 hover:bg-indigo-700'
-                            } text-white px-6 py-2 rounded-lg transition-colors flex items-center`}
+                        className="btn-primary"
+                        style={{
+                            padding: '8px 18px', fontSize: 13,
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            opacity: isRefreshing ? 0.6 : 1,
+                        }}
                     >
                         {isRefreshing ? (
                             <>
-                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                                <div className="spinner spinner-sm" style={{ borderTopColor: '#fff', borderColor: 'rgba(255,255,255,0.3)' }} />
                                 Syncing...
                             </>
                         ) : (
                             <>
-                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                                 </svg>
                                 Refresh Traffic
                             </>
@@ -145,39 +157,26 @@ export const ResultsPage: React.FC = () => {
                             const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
                             window.open(`${API_URL}/api/download-report`, '_blank');
                         }}
-                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors flex items-center"
+                        style={{
+                            background: 'var(--success)', color: '#fff',
+                            border: 'none', borderRadius: 8, padding: '8px 18px',
+                            fontWeight: 600, cursor: 'pointer', fontSize: 13,
+                            display: 'flex', alignItems: 'center', gap: 6,
+                        }}
                     >
-                        <svg
-                            className="w-5 h-5 mr-2"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                            />
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round"
+                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        Download Report
+                        Report
                     </button>
                     <button
                         onClick={() => navigate('/')}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors flex items-center"
+                        className="btn-outline"
+                        style={{ padding: '8px 18px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
                     >
-                        <svg
-                            className="w-5 h-5 mr-2"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                            />
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                         </svg>
                         New Upload
                     </button>
@@ -185,14 +184,17 @@ export const ResultsPage: React.FC = () => {
             </div>
 
             {/* Main Content - Split View */}
-            <div className="flex-1 flex overflow-hidden">
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                 {/* Left Panel - Statistics */}
-                <div className="w-1/3 overflow-hidden border-r border-gray-700">
+                <div style={{
+                    width: '33%', overflow: 'hidden',
+                    borderRight: '1px solid var(--border)'
+                }}>
                     <StatsPanel results={results} />
                 </div>
 
                 {/* Right Panel - Map */}
-                <div className="flex-1">
+                <div style={{ flex: 1 }}>
                     <MapView results={results} />
                 </div>
             </div>

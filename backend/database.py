@@ -406,3 +406,102 @@ def get_current_route_states(conn) -> Dict[int, List[int]]:
             states[vid] = []
         states[vid].append(sid)
     return states
+
+
+# ──────────────────────────────────────────
+# Fleet Vehicle Management
+# ──────────────────────────────────────────
+
+# Default fleet (mirrors the previously hard-coded values in vrp_solver.py)
+DEFAULT_FLEET = [
+    {"name": "Vehicle 1",  "capacity_kg": 175, "cost_per_km": 15, "shift_start": 540,  "shift_end": 1080},
+    {"name": "Vehicle 2",  "capacity_kg": 261, "cost_per_km": 20, "shift_start": 540,  "shift_end": 1080},
+    {"name": "Vehicle 3",  "capacity_kg": 348, "cost_per_km": 25, "shift_start": 420,  "shift_end": 900},
+    {"name": "Vehicle 4",  "capacity_kg": 156, "cost_per_km": 12, "shift_start": 420,  "shift_end": 1080},
+    {"name": "Vehicle 5",  "capacity_kg": 178, "cost_per_km": 15, "shift_start": 540,  "shift_end": 1020},
+    {"name": "Vehicle 6",  "capacity_kg": 142, "cost_per_km": 12, "shift_start": 480,  "shift_end": 1080},
+    {"name": "Vehicle 7",  "capacity_kg": 118, "cost_per_km": 10, "shift_start": 480,  "shift_end": 1260},
+    {"name": "Vehicle 8",  "capacity_kg": 125, "cost_per_km": 10, "shift_start": 420,  "shift_end": 1200},
+    {"name": "Vehicle 9",  "capacity_kg": 200, "cost_per_km": 12, "shift_start": 420,  "shift_end": 1140},
+    {"name": "Vehicle 10", "capacity_kg": 180, "cost_per_km": 14, "shift_start": 480,  "shift_end": 1200},
+]
+
+def ensure_fleet_table(conn):
+    """Create fleet_vehicles table if it doesn't exist."""
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS vector.fleet_vehicles (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(50) NOT NULL,
+            capacity_kg INTEGER NOT NULL,
+            cost_per_km NUMERIC(6,2) NOT NULL,
+            shift_start INTEGER NOT NULL,
+            shift_end INTEGER NOT NULL
+        );
+    """)
+    conn.commit()
+    cur.close()
+
+def seed_default_fleet(conn):
+    """Insert default vehicles if table is empty."""
+    ensure_fleet_table(conn)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM vector.fleet_vehicles;")
+    count = cur.fetchone()[0]
+    if count == 0:
+        for v in DEFAULT_FLEET:
+            cur.execute("""
+                INSERT INTO vector.fleet_vehicles (name, capacity_kg, cost_per_km, shift_start, shift_end)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (v["name"], v["capacity_kg"], v["cost_per_km"], v["shift_start"], v["shift_end"]))
+        conn.commit()
+        print(f"🚛 Seeded {len(DEFAULT_FLEET)} default vehicles.")
+    cur.close()
+
+def get_fleet_vehicles(conn) -> List[Dict[str, Any]]:
+    """Get all fleet vehicles, ordered by id. Seeds defaults if empty."""
+    ensure_fleet_table(conn)
+    seed_default_fleet(conn)
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT * FROM vector.fleet_vehicles ORDER BY id;")
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    # Convert Decimal to float for JSON serialization
+    for r in rows:
+        r['cost_per_km'] = float(r['cost_per_km'])
+    return rows
+
+def upsert_fleet_vehicle(conn, data: Dict[str, Any]) -> Dict[str, Any]:
+    """Insert or update a fleet vehicle. If 'id' is present, update; otherwise insert."""
+    ensure_fleet_table(conn)
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    vehicle_id = data.get("id")
+    if vehicle_id:
+        cur.execute("""
+            UPDATE vector.fleet_vehicles
+            SET name = %s, capacity_kg = %s, cost_per_km = %s, shift_start = %s, shift_end = %s
+            WHERE id = %s
+            RETURNING *;
+        """, (data["name"], data["capacity_kg"], data["cost_per_km"],
+              data["shift_start"], data["shift_end"], vehicle_id))
+    else:
+        cur.execute("""
+            INSERT INTO vector.fleet_vehicles (name, capacity_kg, cost_per_km, shift_start, shift_end)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING *;
+        """, (data["name"], data["capacity_kg"], data["cost_per_km"],
+              data["shift_start"], data["shift_end"]))
+    result = dict(cur.fetchone())
+    conn.commit()
+    cur.close()
+    result['cost_per_km'] = float(result['cost_per_km'])
+    return result
+
+def delete_fleet_vehicle(conn, vehicle_id: int) -> bool:
+    """Delete a fleet vehicle by id. Returns True if deleted."""
+    cur = conn.cursor()
+    cur.execute("DELETE FROM vector.fleet_vehicles WHERE id = %s;", (vehicle_id,))
+    deleted = cur.rowcount > 0
+    conn.commit()
+    cur.close()
+    return deleted

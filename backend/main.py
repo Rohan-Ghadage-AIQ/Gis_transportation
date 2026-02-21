@@ -21,7 +21,10 @@ from database import (
     randomize_station_attributes,
     calculate_distance_matrix,
     fetch_route_geometries_geojson,
-    fetch_results_summary
+    fetch_results_summary,
+    get_fleet_vehicles,
+    upsert_fleet_vehicle,
+    delete_fleet_vehicle
 )
 from vrp_solver import solve_vrp
 from geocoding import batch_geocode
@@ -777,6 +780,54 @@ async def refresh_traffic():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ──────────────────────────────────────────
+# Fleet Management Endpoints
+# ──────────────────────────────────────────
+
+@app.get("/api/fleet")
+async def get_fleet():
+    """Get all fleet vehicles. Seeds defaults if table is empty."""
+    try:
+        conn = get_db_connection()
+        vehicles = get_fleet_vehicles(conn)
+        conn.close()
+        return JSONResponse(content={"vehicles": vehicles})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/fleet")
+async def update_fleet_vehicle(vehicle: Dict[str, Any]):
+    """Create or update a fleet vehicle."""
+    try:
+        required = ["name", "capacity_kg", "cost_per_km", "shift_start", "shift_end"]
+        for field in required:
+            if field not in vehicle:
+                raise HTTPException(status_code=400, detail=f"Missing field: {field}")
+        conn = get_db_connection()
+        result = upsert_fleet_vehicle(conn, vehicle)
+        conn.close()
+        return JSONResponse(content={"status": "success", "vehicle": result})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/fleet/{vehicle_id}")
+async def remove_fleet_vehicle(vehicle_id: int):
+    """Delete a fleet vehicle by id."""
+    try:
+        conn = get_db_connection()
+        deleted = delete_fleet_vehicle(conn, vehicle_id)
+        conn.close()
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Vehicle not found")
+        return JSONResponse(content={"status": "success", "message": f"Vehicle {vehicle_id} deleted"})
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
