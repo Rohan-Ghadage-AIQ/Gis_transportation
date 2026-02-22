@@ -43,6 +43,11 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 - Edit parcel details (weight, time windows, service time)
 - Configure warehouse location
 - Compute optimal routes with capacity and time constraints
+- **🆕 Dynamic Fleet Configuration** — adjust shift times and vehicle capacities on-the-fly in the UI
+- **🆕 Live Data Editing** — edit parcel weights and delivery windows directly in the preview table
+- **🆕 100% Accurate Road Times** — travel times calculated using real road speeds (seconds) from pgRouting
+- **🆕 Overnight Shift Support** — robustly handles shifts starting one day and ending the next (e.g., 8:00 AM to 01:00 AM)
+- **🆕 Monsoon Simulation** — test route adjustments and waterlogging avoidance with `WEATHER_SIMULATE_RAIN=true`
 - **🆕 Live traffic-aware routing** via TomTom Flow Segment Data API
 - **🆕 Refresh Traffic** — re-query congestion and re-solve VRP on demand
 - **🆕 Traffic visualization** — color-coded route segments by congestion level

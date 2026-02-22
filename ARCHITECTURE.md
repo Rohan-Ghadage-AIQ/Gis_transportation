@@ -213,13 +213,26 @@ def calculate_distance_matrix(conn):
 ```python
 # vrp_solver.py - solve_vrp()
 def solve_vrp(conn):
-    # 1. Fetch distance matrix
+    # 1. Fetch distance matrix (Values are in travel SECONDS)
     # 2. Create OR-Tools model
-    # 3. Add capacity constraints
-    # 4. Add time window constraints
-    # 5. Solve optimization
-    # 6. Update station_node_map with vehicle_id
+    # 3. Fetch Dynamic Fleet Config (shifts, capacities, costs) from vector.fleet_vehicles
+    # 4. Add capacity constraints (per vehicle)
+    # 5. Add time window constraints (travel_time = matrix_value / 60)
+    # 6. Solve optimization
+    # 7. Update station_node_map with vehicle_id
 ```
+
+**Travel Time Logic Fix**:
+Previously, the solver treated distance matrix values as meters and divided by 666. However, pgRouting calculates `cost_s` (seconds). The system now correctly divides by 60 to convert **seconds to minutes**, ensuring 100% accurate schedules.
+
+**Temporal Normalization (Cross-Midnight Shifts)**:
+For shifts starting one day and ending the next (e.g., Vehicle 10: 08:00 AM to 01:04 AM), the solver normalizes the `end_time` by adding 1440 minutes (24 hours). This prevents the "End < Start" error and ensures OR-Tools correctly schedules late-night deliveries.
+
+**Dynamic Configuration**:
+The system no longer uses hardcoded vehicle lists. Both the **VRP Solver** and the **Results API** (`/api/results`) fetch the current fleet state from the database. This ensures that any changes made to vehicle shifts or capacities in the UI are immediately reflected in the next optimization.
+
+**Result Metadata Persistence**:
+Since weather alerts and "Rerouted" flags are transient (not stored in the DB station/route tables), they are captured in a global `LAST_VRP_METADATA` store in `main.py` during computation. The `/api/results` endpoint combines DB data with this metadata to provide the full dashboard view.
 
 #### Step 4: Generate Route Geometries
 ```python

@@ -59,6 +59,20 @@ export interface RouteResults {
         lon: number;
     }>;
     rerouted_vehicles?: number[];
+    weather_alerts?: WeatherAlert[];
+    weather_rerouted?: boolean;
+}
+
+// Weather Alert Types
+export interface WeatherAlert {
+    station_id: string;
+    lat: number;
+    lon: number;
+    rain_mm: number;
+    description: string;
+    severity: 'none' | 'moderate' | 'heavy';
+    temp_c?: number;
+    humidity?: number;
 }
 
 // Upload Response Types

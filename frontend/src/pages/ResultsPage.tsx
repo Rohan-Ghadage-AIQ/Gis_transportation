@@ -39,9 +39,17 @@ export const ResultsPage: React.FC = () => {
             setResults(data);
 
             if (data.rerouted_vehicles && data.rerouted_vehicles.length > 0) {
+                const isWeather = data.weather_rerouted;
                 setNotification({
-                    message: `Traffic update: ${data.rerouted_vehicles.length} vehicles rerouted for better efficiency.`,
+                    message: isWeather
+                        ? `⛈️ Weather alert: ${data.rerouted_vehicles.length} vehicle(s) rerouted to avoid waterlogging zones.`
+                        : `Traffic update: ${data.rerouted_vehicles.length} vehicles rerouted for better efficiency.`,
                     type: 'warning'
+                });
+            } else if (data.weather_alerts && data.weather_alerts.length > 0) {
+                setNotification({
+                    message: `🌧️ Rain detected at ${data.weather_alerts.length} station(s), but current routes remain optimal.`,
+                    type: 'success'
                 });
             } else {
                 setNotification({

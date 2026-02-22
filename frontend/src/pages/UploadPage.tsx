@@ -12,17 +12,18 @@ export const UploadPage: React.FC = () => {
     const [error, setError] = useState('');
     const [showFleet, setShowFleet] = useState(false);
     const [isDragActive, setIsDragActive] = useState(false);
+    const [isEdited, setIsEdited] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         setIsDragActive(false);
         const droppedFile = e.dataTransfer.files?.[0];
-        if (droppedFile && droppedFile.name.endsWith('.xlsx')) {
+        if (droppedFile && (droppedFile.name.endsWith('.xlsx') || droppedFile.name.endsWith('.csv'))) {
             setFile(droppedFile);
             handleFileLoad(droppedFile);
         } else {
-            setError('Please upload an .xlsx file');
+            setError('Please upload an .xlsx or .csv file');
         }
     }, []);
 
@@ -33,6 +34,7 @@ export const UploadPage: React.FC = () => {
         try {
             const res = await apiService.uploadFile(f);
             setPreviewData(res.data);
+            setIsEdited(false);
         } catch (err: any) {
             setError(err.response?.data?.detail || 'Upload failed');
         } finally {
@@ -50,8 +52,14 @@ export const UploadPage: React.FC = () => {
 
     const handleCompute = async () => {
         setIsLoading(true);
-        setLoadingMsg('Computing optimal routes...');
         try {
+            // Auto-save edits before computing
+            if (isEdited && previewData) {
+                setLoadingMsg('Saving edits...');
+                await apiService.updateData(previewData);
+                setIsEdited(false);
+            }
+            setLoadingMsg('Computing optimal routes...');
             await apiService.computeRoutes();
             navigate('/results');
         } catch (err: any) {
@@ -192,7 +200,7 @@ export const UploadPage: React.FC = () => {
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept=".xlsx"
+                        accept=".xlsx,.csv"
                         onChange={handleFileChange}
                         style={{ display: 'none' }}
                     />
@@ -212,7 +220,7 @@ export const UploadPage: React.FC = () => {
                                 Drop your delivery file here
                             </p>
                             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-                                or <span style={{ color: 'var(--primary)', fontWeight: 600 }}>click to browse</span> — supports .xlsx
+                                or <span style={{ color: 'var(--primary)', fontWeight: 600 }}>click to browse</span> — supports .xlsx, .csv
                             </p>
                         </div>
                     ) : (
@@ -250,33 +258,95 @@ export const UploadPage: React.FC = () => {
                                 >✕</button>
                             </div>
 
-                            {/* Data preview table */}
+                            {/* Data preview table — EDITABLE */}
                             {previewData && previewData.length > 0 && (
-                                <div style={{
-                                    maxHeight: 200, overflowY: 'auto',
-                                    borderRadius: 10, border: '1px solid var(--border-light)',
-                                }}>
-                                    <table className="data-table" style={{ width: '100%', fontSize: 12 }}>
-                                        <thead>
-                                            <tr>
-                                                {Object.keys(previewData[0]).map(col => (
-                                                    <th key={col} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11 }}>{col}</th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {previewData.slice(0, 8).map((row, i) => (
-                                                <tr key={i}>
-                                                    {Object.values(row).map((val: any, j) => (
-                                                        <td key={j} style={{ padding: '6px 10px' }}>
-                                                            {typeof val === 'number' ? val.toFixed(4) : String(val)}
-                                                        </td>
+                                <>
+                                    <div style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                        marginBottom: 8,
+                                    }}>
+                                        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
+                                            ✏️ Click any cell to edit
+                                        </span>
+                                        {isEdited && (
+                                            <button
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    try {
+                                                        setIsLoading(true);
+                                                        setLoadingMsg('Saving changes...');
+                                                        await apiService.updateData(previewData);
+                                                        setIsEdited(false);
+                                                    } catch (err: any) {
+                                                        setError(err.response?.data?.detail || 'Failed to save');
+                                                    } finally {
+                                                        setIsLoading(false);
+                                                    }
+                                                }}
+                                                style={{
+                                                    background: 'var(--primary)', color: '#fff', border: 'none',
+                                                    borderRadius: 8, padding: '5px 14px', fontSize: 12,
+                                                    fontWeight: 700, cursor: 'pointer',
+                                                }}
+                                            >
+                                                💾 Save Changes
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div style={{
+                                        maxHeight: 400, overflowY: 'auto',
+                                        borderRadius: 10, border: '1px solid var(--border-light)',
+                                    }}>
+                                        <table className="data-table" style={{ width: '100%', fontSize: 12 }}>
+                                            <thead>
+                                                <tr>
+                                                    {Object.keys(previewData[0]).map(col => (
+                                                        <th key={col} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11 }}>{col}</th>
                                                     ))}
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            </thead>
+                                            <tbody>
+                                                {previewData.map((row, i) => (
+                                                    <tr key={i}>
+                                                        {Object.entries(row).map(([key, val]: [string, any], j) => (
+                                                            <td key={j} style={{ padding: '2px 4px' }}>
+                                                                <input
+                                                                    type="text"
+                                                                    defaultValue={typeof val === 'number' ? val : String(val ?? '')}
+                                                                    onBlur={(e) => {
+                                                                        const newVal = e.target.value;
+                                                                        const parsed = Number(newVal);
+                                                                        const finalVal = !isNaN(parsed) && newVal.trim() !== '' ? parsed : newVal;
+                                                                        if (finalVal !== val) {
+                                                                            const updated = [...previewData];
+                                                                            updated[i] = { ...updated[i], [key]: finalVal };
+                                                                            setPreviewData(updated);
+                                                                            setIsEdited(true);
+                                                                        }
+                                                                    }}
+                                                                    style={{
+                                                                        width: '100%', border: '1px solid transparent',
+                                                                        borderRadius: 4, padding: '4px 6px', fontSize: 12,
+                                                                        background: 'transparent', color: 'var(--text)',
+                                                                        outline: 'none', minWidth: 60,
+                                                                    }}
+                                                                    onFocus={(e) => {
+                                                                        e.target.style.border = '1px solid var(--primary)';
+                                                                        e.target.style.background = 'var(--primary-light)';
+                                                                    }}
+                                                                    onBlurCapture={(e) => {
+                                                                        e.target.style.border = '1px solid transparent';
+                                                                        e.target.style.background = 'transparent';
+                                                                    }}
+                                                                />
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
                             )}
                         </div>
                     )}

@@ -43,6 +43,35 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ results }) => {
                 Route Statistics
             </h2>
 
+            {/* Weather Alert Banner */}
+            {results.weather_alerts && results.weather_alerts.length > 0 && (
+                <div style={{
+                    background: results.weather_rerouted ? '#FEF2F2' : '#EFF6FF',
+                    border: `1px solid ${results.weather_rerouted ? '#FECACA' : '#BFDBFE'}`,
+                    borderRadius: 10, padding: '10px 14px', marginBottom: 14,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                        <path d="M20 15.5a3.5 3.5 0 00-3.5-3.5h-.52A5.002 5.002 0 007 11.5 3.5 3.5 0 004 15.5 3.5 3.5 0 007.5 19h9a3.5 3.5 0 003.5-3.5z"
+                            fill={results.weather_rerouted ? '#DC2626' : '#3B82F6'} opacity="0.85" />
+                        <path d="M8 21l1-3m3 3l1-3m3 3l1-3"
+                            stroke={results.weather_rerouted ? '#DC2626' : '#3B82F6'} strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: results.weather_rerouted ? '#991B1B' : '#1E40AF' }}>
+                            {results.weather_rerouted
+                                ? '⛈️ Routes adjusted due to weather'
+                                : '🌧️ Rain detected at delivery stations'}
+                        </div>
+                        <div style={{ fontSize: 11, color: results.weather_rerouted ? '#B91C1C' : '#3B82F6', marginTop: 2 }}>
+                            {results.weather_alerts.length} station{results.weather_alerts.length > 1 ? 's' : ''} affected
+                            {results.weather_alerts.filter(a => a.severity === 'heavy').length > 0 &&
+                                ` • ${results.weather_alerts.filter(a => a.severity === 'heavy').length} waterlogging zones avoided`}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Summary Cards */}
             <div style={{
                 display: 'grid', gridTemplateColumns: '1fr 1fr',

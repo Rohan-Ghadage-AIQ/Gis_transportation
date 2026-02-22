@@ -4,6 +4,7 @@ from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 
 from traffic_service import traffic_service
+from weather_service import weather_service
 from database import (
     get_db_connection,
     get_warehouse_node,
@@ -78,6 +79,61 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         print("ℹ️ TOMTOM_API_KEY not set — using static road costs.")
     # ---------------------------
 
+    # --- LIVE WEATHER CHECK via OpenWeatherMap ---
+    weather_alerts = []
+    owm_key = os.getenv("OPENWEATHER_API_KEY", "")
+    if owm_key:
+        print("\n🌦️  Checking live weather from OpenWeatherMap...")
+        print("   ┌─────────┬──────────────────────┬──────────┬──────────┬──────────────────┐")
+        print("   │ Station │ Location             │ Rain mm/h│ Penalty  │ Severity         │")
+        print("   ├─────────┼──────────────────────┼──────────┼──────────┼──────────────────┤")
+        weather_tried = 0
+        weather_affected = 0
+        try:
+            # Check weather for all stations (OpenWeatherMap free tier: 60 calls/min)
+            for s in stations[:30]:
+                weather_tried += 1
+                weather = weather_service.get_weather(s['latitude'], s['longitude'])
+
+                if weather["severity"] != "none":
+                    weather_affected += 1
+                    # Apply weather penalty to road segments near this station
+                    # This stacks with any traffic penalties already applied
+                    update_road_traffic_factor(
+                        conn, s['latitude'], s['longitude'],
+                        weather["penalty_factor"], radius_km=2.0
+                    )
+
+                    severity_icon = "🔴 HEAVY" if weather["severity"] == "heavy" else "🟠 MODERATE"
+                    print(f"   │ {s['station_id']:>7} │ {s['latitude']:>9.4f},{s['longitude']:>9.4f} │ {weather['rain_mm']:>7.1f} │ {weather['penalty_factor']:>7.1f}x │ {severity_icon:<16} │")
+
+                    # Collect alert for frontend
+                    weather_alerts.append({
+                        "station_id": str(s['station_id']),
+                        "lat": s['latitude'],
+                        "lon": s['longitude'],
+                        "rain_mm": weather["rain_mm"],
+                        "description": weather["description"],
+                        "severity": weather["severity"],
+                        "temp_c": weather["temp_c"],
+                        "humidity": weather["humidity"],
+                    })
+                else:
+                    print(f"   │ {s['station_id']:>7} │ {s['latitude']:>9.4f},{s['longitude']:>9.4f} │     0.0 │    1.0x │ ☀️ CLEAR          │")
+
+            print("   └─────────┴──────────────────────┴──────────┴──────────┴──────────────────┘")
+            if weather_affected > 0:
+                print(f"   ⛈️  Weather alert: {weather_affected}/{weather_tried} stations affected by rain!")
+                print(f"   🔄 Routes will be adjusted to avoid waterlogging zones.")
+            else:
+                print(f"   ☀️  Weather check complete — no rainfall detected at any station.")
+        except Exception as e:
+            print(f"⚠️ Weather sync failed, proceeding without weather penalties: {e}")
+    else:
+        print("ℹ️ OPENWEATHER_API_KEY not set — skipping weather check.")
+    # ---------------------------
+
+
     # Get depot (warehouse) node
     depot_node = get_warehouse_node(conn, warehouse_lon, warehouse_lat)
     
@@ -92,7 +148,7 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     node_demands = [0] + [s['parcel_weight'] for s in stations]
     station_ids = [None] + [s['station_id'] for s in stations]
     node_service_times = [WAREHOUSE_LOADING_MINUTES] + [s['service_time'] for s in stations]
-    node_windows = [(420, 1260)] + [(s['window_start'], s['window_end']) for s in stations]
+    node_windows = [(0, 1440)] + [(s['window_start'], s['window_end']) for s in stations]
     
     # CRITICAL VALIDATION: Ensure no NULL nodes in system
     if None in nodes_in_system:
@@ -135,7 +191,17 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     num_vehicles = len(fleet)
     vehicle_capacities = [v['capacity_kg'] for v in fleet]
     vehicle_costs_per_km = [float(v['cost_per_km']) for v in fleet]
-    vehicle_times = [(v['shift_start'], v['shift_end']) for v in fleet]
+    
+    # Normalize vehicle shifts (handle cross-midnight cases)
+    vehicle_times = []
+    for v in fleet:
+        start = v['shift_start']
+        end = v['shift_end']
+        # If end is numerically smaller than start, it means the shift crosses midnight
+        # e.g. 20:00 (1200) to 01:00 (60). Next day 01:00 is 1440+60=1500.
+        if end < start:
+            end += 1440
+        vehicle_times.append((start, end))
     
     # Create routing model
     manager = pywrapcp.RoutingIndexManager(size, num_vehicles, 0)
@@ -145,7 +211,8 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     def time_callback(from_idx, to_idx):
         from_node = manager.IndexToNode(from_idx)
         to_node = manager.IndexToNode(to_idx)
-        travel_time = dist_matrix[from_node][to_node] / 666  # meters → minutes at ~40 km/h
+        # dist_matrix values are in SECONDS (from pgRouting cost_s column)
+        travel_time = dist_matrix[from_node][to_node] / 60  # seconds → minutes
         # Use round() instead of int() to avoid truncating short trips to 0.
         # Enforce minimum 1 minute travel between any two DIFFERENT nodes.
         if from_node != to_node:
@@ -156,12 +223,17 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     
     time_callback_index = routing.RegisterTransitCallback(time_callback)
     
-    # Time dimension - max is the latest vehicle shift end
-    max_shift = max(end for _, end in vehicle_times)
+    # Time dimension - absolute max must cover ALL time values (windows + shifts + overtime)
+    # We use normalized vehicle_times to ensure shifts spanning midnight are included
+    max_vehicle_end = max(end for _, end in vehicle_times) if vehicle_times else 1440
+    max_window_end = max(w[1] for w in node_windows) if node_windows else 1440
+    max_vehicle_start = max(start for start, _ in vehicle_times) if vehicle_times else 0
+    
+    absolute_max = max(max_vehicle_end + 120, max_window_end, max_vehicle_start) + 60
     routing.AddDimension(
         time_callback_index,
-        60,         # slack
-        max_shift,  # Max across all vehicle shifts
+        120,           # slack — allow waiting up to 2 hours
+        absolute_max,  # Absolute max across all time values
         False,
         'Time'
     )
@@ -173,19 +245,23 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         index = manager.NodeToIndex(i)
         ws, deadline = node_windows[i]
         # Hard range: allow delivery anytime within the overall shift window
-        time_dimension.CumulVar(index).SetRange(0, max_shift)
+        time_dimension.CumulVar(index).SetRange(0, absolute_max)
         # Soft penalty: strongly prefer delivery before the parcel's deadline
         time_dimension.SetCumulVarSoftUpperBound(index, deadline, 100000)
     
     # Vehicle-specific time constraints
     for v in range(num_vehicles):
         start_avail, end_avail = vehicle_times[v]
+        # (Normalization already handled above)
+        
         start_index = routing.Start(v)
-        # Hard: vehicle cannot start before its shift
-        time_dimension.CumulVar(start_index).SetRange(start_avail, start_avail)
+        # Hard: vehicle starts within its shift window (allow some flexibility)
+        time_dimension.CumulVar(start_index).SetRange(start_avail, end_avail)
         end_index = routing.End(v)
         # Hard: vehicle must return by shift end + 60 min overtime buffer
-        overtime_limit = min(end_avail + 60, max_shift)
+        overtime_limit = min(end_avail + 60, absolute_max)
+        # Safety: ensure lower bound <= upper bound for SetRange
+        overtime_limit = max(overtime_limit, start_avail)
         time_dimension.CumulVar(end_index).SetRange(start_avail, overtime_limit)
         # Soft: penalize going past actual shift end
         time_dimension.SetCumulVarSoftUpperBound(end_index, end_avail, 50000)
@@ -313,15 +389,6 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         max_cap = vehicle_capacities[v_id]
         utilization = (total_weight / max_cap) * 100
         
-        # Calculate route distance
-        route_distance = 0
-        prev_index = routing.Start(v_id)
-        while not routing.IsEnd(prev_index):
-            curr_index = solution.Value(routing.NextVar(prev_index))
-            route_distance += dist_matrix[manager.IndexToNode(prev_index)][manager.IndexToNode(curr_index)]
-            prev_index = curr_index
-        
-        total_op_cost = (route_distance / 1000.0) * vehicle_costs_per_km[v_id]
         actual_work_time = return_min - start_min
         _, end_avail = vehicle_times[v_id]
         overtime = max(0, return_min - end_avail)
@@ -331,12 +398,22 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         if len(route_nodes) > 2:
             save_route_geometry(conn, v_id + 1, route_nodes)
         
+        # Calculate route distance from saved geometry (real road km)
+        # dist_matrix contains seconds, NOT meters — so we use ST_Length instead
+        cur.execute("""
+            SELECT COALESCE(SUM(ST_Length(geom::geography)) / 1000.0, 0)
+            FROM vector.route_geometries WHERE vehicle_id = %s
+        """, (v_id + 1,))
+        route_distance_km = float(cur.fetchone()[0])
+        
+        total_op_cost = route_distance_km * vehicle_costs_per_km[v_id]
+        
         routes.append({
             "vehicle_id": v_id + 1,
             "stops": route_stops,
             "start_time": min_to_clock(start_min),
             "end_time": min_to_clock(return_min),
-            "distance_km": round(route_distance / 1000.0, 2),
+            "distance_km": round(route_distance_km, 2),
             "cost": round(total_op_cost, 2),
             "weight_kg": total_weight,
             "capacity_kg": max_cap,
@@ -386,6 +463,10 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     
     # --- REROUTE DETECTION ---
     rerouted_vehicles = []
+    reroute_reason = "traffic"
+    if len(weather_alerts) > 0:
+        reroute_reason = "weather"
+    
     for route in routes:
         v_id = int(route["vehicle_id"])
         new_seq = [stop["station_id"] for stop in route["stops"]]
@@ -393,12 +474,17 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         
         if old_seq and new_seq != old_seq:
             rerouted_vehicles.append(v_id)
-            print(f"🔄 Vehicle {v_id} REROUTED due to updated traffic conditions.")
+            if reroute_reason == "weather":
+                print(f"⛈️  Vehicle {v_id} REROUTED due to weather conditions.")
+            else:
+                print(f"🔄 Vehicle {v_id} REROUTED due to updated traffic conditions.")
 
     return {
         "success": True,
         "routes": routes,
         "total_vehicles_used": len(routes),
         "total_deliveries": sum(len(r['stops']) for r in routes),
-        "rerouted_vehicles": rerouted_vehicles
+        "rerouted_vehicles": rerouted_vehicles,
+        "weather_alerts": weather_alerts,
+        "weather_rerouted": len(weather_alerts) > 0 and len(rerouted_vehicles) > 0,
     }

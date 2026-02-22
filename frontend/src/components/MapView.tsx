@@ -167,6 +167,67 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
                 // Store markers for this vehicle
                 markersRef.current.set(vehicle.vehicle_id, vehicleMarkers);
             });
+
+            // ── Weather Alert Markers & Waterlogging Zones ──
+            if (results.weather_alerts && results.weather_alerts.length > 0) {
+                results.weather_alerts.forEach((alert, idx) => {
+                    if (!map.current) return;
+
+                    // Waterlogging zone — semi-transparent circle
+                    const zoneColor = alert.severity === 'heavy' ? '#DC2626' : '#3B82F6';
+                    const zoneOpacity = alert.severity === 'heavy' ? 0.18 : 0.12;
+                    map.current.addSource(`weather-zone-${idx}`, {
+                        type: 'geojson',
+                        data: {
+                            type: 'Feature',
+                            geometry: {
+                                type: 'Point',
+                                coordinates: [alert.lon, alert.lat]
+                            },
+                            properties: {}
+                        }
+                    });
+                    map.current.addLayer({
+                        id: `weather-zone-${idx}`,
+                        type: 'circle',
+                        source: `weather-zone-${idx}`,
+                        paint: {
+                            'circle-radius': alert.severity === 'heavy' ? 45 : 30,
+                            'circle-color': zoneColor,
+                            'circle-opacity': zoneOpacity,
+                            'circle-stroke-width': 2,
+                            'circle-stroke-color': zoneColor,
+                            'circle-stroke-opacity': 0.4,
+                        }
+                    });
+
+                    // Rain icon marker
+                    const rainEl = document.createElement('div');
+                    rainEl.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                        <path d="M20 15.5a3.5 3.5 0 00-3.5-3.5h-.52A5.002 5.002 0 007 11.5 3.5 3.5 0 004 15.5 3.5 3.5 0 007.5 19h9a3.5 3.5 0 003.5-3.5z" fill="${alert.severity === 'heavy' ? '#DC2626' : '#3B82F6'}" opacity="0.85"/>
+                        <path d="M8 21l1-3m3 3l1-3m3 3l1-3" stroke="${alert.severity === 'heavy' ? '#DC2626' : '#3B82F6'}" stroke-width="2" stroke-linecap="round"/>
+                    </svg>`;
+                    rainEl.style.cursor = 'pointer';
+                    rainEl.title = alert.description;
+
+                    new maptilersdk.Marker({ element: rainEl })
+                        .setLngLat([alert.lon, alert.lat])
+                        .setPopup(
+                            new maptilersdk.Popup({ offset: 25 }).setHTML(
+                                `<div style="color:#000;">
+                                    <strong>⛈️ Weather Alert</strong><br/>
+                                    Station: ${alert.station_id}<br/>
+                                    ${alert.description}<br/>
+                                    Rainfall: ${alert.rain_mm} mm/hr<br/>
+                                    <span style="color:${alert.severity === 'heavy' ? '#DC2626' : '#F59E0B'}">
+                                        ${alert.severity === 'heavy' ? '🔴 Waterlogging Risk — Route Avoided' : '🟠 Moderate Rain — Route Penalized'}
+                                    </span>
+                                </div>`
+                            )
+                        )
+                        .addTo(map.current);
+                });
+            }
         });
 
         return () => {
@@ -316,6 +377,27 @@ export const MapView: React.FC<MapViewProps> = ({ results }) => {
                                 ))}
                             </div>
                         </div>
+
+                        {/* Weather Legend */}
+                        {results.weather_alerts && results.weather_alerts.length > 0 && (
+                            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border-light)' }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>⛈️ Weather Alerts</span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                                    {[
+                                        { color: '#DC2626', label: 'Heavy Rain (≥7.5 mm/hr)' },
+                                        { color: '#3B82F6', label: 'Moderate Rain (2.5–7.5 mm/hr)' },
+                                    ].map(item => (
+                                        <div key={item.color} style={{ display: 'flex', alignItems: 'center' }}>
+                                            <div style={{ width: 12, height: 12, borderRadius: '50%', background: item.color, opacity: 0.3, marginRight: 8, border: `2px solid ${item.color}` }} />
+                                            {item.label}
+                                        </div>
+                                    ))}
+                                    <div style={{ fontSize: 10, color: 'var(--text-light)', marginTop: 2 }}>
+                                        {results.weather_alerts.length} station{results.weather_alerts.length > 1 ? 's' : ''} affected
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

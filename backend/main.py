@@ -28,6 +28,7 @@ from database import (
 )
 from vrp_solver import solve_vrp
 from geocoding import batch_geocode
+from weather_service import weather_service
 
 load_dotenv()
 
@@ -87,6 +88,14 @@ uploaded_data = None
 warehouse_config = {
     "latitude": 19.0760,  # Mumbai default
     "longitude": 72.8777
+}
+
+# Transient VRP metadata (weather alerts, rerouted vehicles)
+# Stored globally because it is not persisted in the DB
+LAST_VRP_METADATA = {
+    "weather_alerts": [],
+    "weather_rerouted": False,
+    "rerouted_vehicles": []
 }
 
 # Shift logic for time windows
@@ -171,9 +180,13 @@ async def upload_file(file: UploadFile = File(...)):
     global uploaded_data
     
     try:
-        # Read CSV file
+        # Read file — support both CSV and XLSX
         contents = await file.read()
-        df = pd.read_csv(io.BytesIO(contents))
+        filename = file.filename or ""
+        if filename.endswith('.xlsx') or filename.endswith('.xls'):
+            df = pd.read_excel(io.BytesIO(contents))
+        else:
+            df = pd.read_csv(io.BytesIO(contents))
         
         # Validate required columns
         required_base_columns = ['id', 'parcel_weight', 'service_time', 'window_end']
@@ -430,7 +443,15 @@ async def compute_routes():
         
         # Step 5: Solve VRP
         print("\n[Step 4/5] Solving VRP with OR-Tools...")
-        solve_vrp(warehouse_config["longitude"], warehouse_config["latitude"])
+        vrp_result = solve_vrp(warehouse_config["longitude"], warehouse_config["latitude"])
+        
+        # Save transient metadata for the results API
+        global LAST_VRP_METADATA
+        LAST_VRP_METADATA = {
+            "weather_alerts": vrp_result.get("weather_alerts", []),
+            "weather_rerouted": vrp_result.get("weather_rerouted", False),
+            "rerouted_vehicles": vrp_result.get("rerouted_vehicles", [])
+        }
         print("✓ VRP solved")
         
         print("\n" + "="*60)
@@ -464,9 +485,9 @@ def get_all_results_data(conn):
         # Note: fetch_results_summary uses station_node_map and route_geometries
         summary_data = fetch_results_summary(conn)
         
-        # Fetch all station status/arrival data
+        # Fetch all station status/arrival data — ordered by arrival_time for correct delivery sequence
         # IMPORTANT: Use dict-like row access (RealDictCursor)
-        cur.execute("SELECT station_id, ST_X(geom) as lon, ST_Y(geom) as lat, vehicle_id, parcel_weight, arrival_time, delivery_status FROM vector.station_node_map")
+        cur.execute("SELECT station_id, ST_X(geom) as lon, ST_Y(geom) as lat, vehicle_id, parcel_weight, arrival_time, delivery_status FROM vector.station_node_map ORDER BY vehicle_id, arrival_time")
         stations_data = cur.fetchall()
         
         # Fetch route geometries
@@ -476,13 +497,9 @@ def get_all_results_data(conn):
         cur.execute("SELECT station_id, latitude, longitude FROM vector.unassigned_parcels ORDER BY station_id")
         undelivered_data = cur.fetchall()
         
-        # Vehicle configuration - Must match solver
-        vehicle_shifts = [
-            (540, 1080), (540, 1080), (420, 900), (420, 1080), (540, 1020),
-            (480, 1080), (480, 1260), (420, 1200), (420, 1140), (480, 1200)
-        ]
-        vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10, 12, 14]
-        vehicle_capacities = [175, 261, 348, 156, 178, 142, 118, 125, 200, 180]
+        # Read fleet config from DB (stays in sync with solver)
+        fleet = get_fleet_vehicles(conn)
+        fleet_by_id = {i + 1: v for i, v in enumerate(fleet)}
         
         vehicles = []
         parcels = []
@@ -518,14 +535,19 @@ def get_all_results_data(conn):
                     })
             
             dist_km = float(vehicle["total_km"])
-            v_cost = dist_km * vehicle_costs_per_km[vehicle_id - 1]
+            
+            # Get fleet config for this vehicle from DB
+            v_config = fleet_by_id.get(vehicle_id, {})
+            v_cost_per_km = float(v_config.get('cost_per_km', 14))
+            v_capacity = int(v_config.get('capacity_kg', 180))
+            s_start = int(v_config.get('shift_start', 480))
+            s_end = int(v_config.get('shift_end', 1080))
+            
+            v_cost = dist_km * v_cost_per_km
             total_cost += v_cost
             
             # Map geometry
             v_geometry = [f for f in route_geojson["features"] if f["properties"]["vehicle_id"] == vehicle_id]
-            
-            # Shift details
-            s_start, s_end = vehicle_shifts[vehicle_id - 1]
             
             vehicles.append({
                 "vehicle_id": vehicle_id,
@@ -535,8 +557,8 @@ def get_all_results_data(conn):
                 "cost": round(v_cost, 2),
                 "stations": v_stations,
                 "route_geometry": v_geometry,
-                "capacity": vehicle_capacities[vehicle_id - 1],
-                "utilization": round((int(vehicle["total_weight_kg"]) / vehicle_capacities[vehicle_id - 1]) * 100, 1),
+                "capacity": v_capacity,
+                "utilization": round((int(vehicle["total_weight_kg"]) / v_capacity) * 100, 1) if v_capacity > 0 else 0,
                 "work_duration": s_end - s_start,
                 "color": VEHICLE_COLORS[vehicle_id - 1] if vehicle_id <= len(VEHICLE_COLORS) else "#888888",
                 "clock_in": f"{s_start // 60:02d}:{s_start % 60:02d}",
@@ -564,7 +586,10 @@ def get_all_results_data(conn):
                     "lon": float(s['longitude'])
                 }
                 for s in undelivered_data
-            ]
+            ],
+            "weather_alerts": LAST_VRP_METADATA.get("weather_alerts", []),
+            "weather_rerouted": LAST_VRP_METADATA.get("weather_rerouted", False),
+            "rerouted_vehicles": LAST_VRP_METADATA.get("rerouted_vehicles", [])
         }
     finally:
         cur.close()
@@ -588,14 +613,14 @@ async def get_results():
         # Fetch route geometries
         route_geojson = fetch_route_geometries_geojson(conn)
         
-        # Fetch station assignments
+        # Fetch station assignments — ordered by arrival_time for correct delivery sequence
         cursor = conn.cursor()
         cursor.execute("""
             SELECT station_id, ST_X(geom) as longitude, ST_Y(geom) as latitude, vehicle_id, parcel_weight, 
                    arrival_time, delivery_status
             FROM vector.station_node_map
             WHERE vehicle_id IS NOT NULL
-            ORDER BY vehicle_id, station_id
+            ORDER BY vehicle_id, arrival_time
         """)
         stations_data = cursor.fetchall()
         
@@ -613,25 +638,9 @@ async def get_results():
         parcels = []
         total_cost = 0
         
-        # Vehicle shift times (10 vehicles) — minutes from midnight, matching vrp_solver.py
-        vehicle_shifts = [
-            (540, 1080),   # V1: 09:00 - 18:00
-            (540, 1080),   # V2: 09:00 - 18:00
-            (420, 900),    # V3: 07:00 - 15:00
-            (420, 1080),   # V4: 07:00 - 18:00
-            (540, 1020),   # V5: 09:00 - 17:00
-            (480, 1080),   # V6: 08:00 - 18:00
-            (480, 1260),   # V7: 08:00 - 21:00
-            (420, 1200),   # V8: 07:00 - 20:00
-            (420, 1140),   # V9: 07:00 - 19:00
-            (480, 1200)    # V10: 08:00 - 20:00
-        ]
-        
-        # Vehicle costs per km (10 vehicles)
-        vehicle_costs_per_km = [15, 20, 25, 12, 15, 12, 10, 10, 12, 14]
-        
-        # Vehicle capacities (10 vehicles)
-        vehicle_capacities = [175, 261, 348, 156, 178, 142, 118, 125, 200, 180]
+        # Read fleet config from DB (stays in sync with solver)
+        fleet = get_fleet_vehicles(conn)
+        fleet_by_id = {i + 1: v for i, v in enumerate(fleet)}
         
         
         for vehicle in summary_data["vehicles"]:
@@ -665,9 +674,16 @@ async def get_results():
                         "color": VEHICLE_COLORS[vehicle_id - 1] if vehicle_id <= len(VEHICLE_COLORS) else "#888888"
                     })
             
-            # Calculate cost
+            # Calculate cost from DB fleet config
             distance_km = float(vehicle["total_km"])
-            cost = distance_km * vehicle_costs_per_km[vehicle_id - 1]
+            
+            v_config = fleet_by_id.get(vehicle_id, {})
+            cost_per_km = float(v_config.get('cost_per_km', 14))
+            v_capacity = int(v_config.get('capacity_kg', 180))
+            shift_start = int(v_config.get('shift_start', 480))
+            shift_end = int(v_config.get('shift_end', 1080))
+            
+            cost = distance_km * cost_per_km
             total_cost += cost
             
             # Get route geometry for this vehicle
@@ -677,7 +693,6 @@ async def get_results():
             ]
             
             # Get shift times (minutes from midnight)
-            shift_start, shift_end = vehicle_shifts[vehicle_id - 1]
             clock_in = f"{shift_start // 60:02d}:{shift_start % 60:02d}"
             clock_out = f"{shift_end // 60:02d}:{shift_end % 60:02d}"
             work_mins = shift_end - shift_start
@@ -690,8 +705,8 @@ async def get_results():
                 "cost": round(cost, 2),
                 "stations": vehicle_stations,
                 "route_geometry": vehicle_routes,
-                "capacity": vehicle_capacities[vehicle_id - 1],
-                "utilization": round((int(vehicle["total_weight_kg"]) / vehicle_capacities[vehicle_id - 1]) * 100, 1),
+                "capacity": v_capacity,
+                "utilization": round((int(vehicle["total_weight_kg"]) / v_capacity) * 100, 1) if v_capacity > 0 else 0,
                 "work_duration": work_mins,
                 "color": VEHICLE_COLORS[vehicle_id - 1] if vehicle_id <= len(VEHICLE_COLORS) else "#888888",
                 "clock_in": clock_in,
@@ -722,7 +737,10 @@ async def get_results():
                 }
             },
             "parcels": parcels,
-            "undelivered_parcels": undelivered_parcels
+            "undelivered_parcels": undelivered_parcels,
+            "weather_alerts": LAST_VRP_METADATA.get("weather_alerts", []),
+            "weather_rerouted": LAST_VRP_METADATA.get("weather_rerouted", False),
+            "rerouted_vehicles": LAST_VRP_METADATA.get("rerouted_vehicles", [])
         })
         
     except Exception as e:
@@ -772,9 +790,13 @@ async def refresh_traffic():
         finally:
             result_conn.close()
         
-        # 3. Inject reroute info from the solve
+        # 3. Inject reroute and weather info from the solve
         if "rerouted_vehicles" in solve_results:
             data["rerouted_vehicles"] = solve_results["rerouted_vehicles"]
+        if "weather_alerts" in solve_results:
+            data["weather_alerts"] = solve_results["weather_alerts"]
+        if "weather_rerouted" in solve_results:
+            data["weather_rerouted"] = solve_results["weather_rerouted"]
             
         return JSONResponse(content=data)
     except Exception as e:
@@ -828,6 +850,56 @@ async def remove_fleet_vehicle(vehicle_id: int):
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ──────────────────────────────────────────
+# Weather Endpoints
+# ──────────────────────────────────────────
+
+@app.get("/api/weather")
+async def get_weather():
+    """Get current weather conditions for all stations"""
+    try:
+        owm_key = os.getenv("OPENWEATHER_API_KEY", "")
+        if not owm_key:
+            return JSONResponse(content={"weather_alerts": [], "message": "OPENWEATHER_API_KEY not configured"})
+        
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        try:
+            cur.execute("SELECT station_id, ST_Y(geom) as latitude, ST_X(geom) as longitude FROM vector.station_node_map WHERE vehicle_id IS NOT NULL")
+            stations = cur.fetchall()
+        finally:
+            cur.close()
+            conn.close()
+        
+        if not stations:
+            return JSONResponse(content={"weather_alerts": [], "message": "No stations found"})
+        
+        alerts = []
+        for s in stations[:30]:  # Limit to 30 for API rate limits
+            weather = weather_service.get_weather(float(s['latitude']), float(s['longitude']))
+            if weather["severity"] != "none":
+                alerts.append({
+                    "station_id": str(s['station_id']),
+                    "lat": float(s['latitude']),
+                    "lon": float(s['longitude']),
+                    "rain_mm": weather["rain_mm"],
+                    "description": weather["description"],
+                    "severity": weather["severity"],
+                    "temp_c": weather["temp_c"],
+                    "humidity": weather["humidity"],
+                })
+        
+        return JSONResponse(content={
+            "weather_alerts": alerts,
+            "total_checked": len(stations[:30]),
+            "affected_count": len(alerts),
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

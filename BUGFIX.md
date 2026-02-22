@@ -213,3 +213,82 @@ Added a new section at the bottom of the report to group parcels by their assign
 | `backend/report_generator.py` | Updated shift definitions, status logic, sorting, and added summary section |
 | `backend/vrp_solver.py` | Updated internal status string to match report terminology |
 
+---
+
+# Bug Fix: Unrealistic Travel Times & Unit Mismatch
+
+## Problem
+
+Vehicle arrival times were drastically early and logically impossible. For example, a vehicle would travel 15km through Mumbai city traffic in just 11 minutes (starting at 08:00 AM and arriving at 08:11 AM).
+
+## Root Cause Analysis
+
+**1 fundamental logic bug** was identified in `backend/vrp_solver.py`:
+
+### Bug: Distance matrix unit interpreted as meters, while values were seconds
+
+The `distance_matrix` table stores travel time in **seconds** (derived from `cost_s` or `live_cost_s` in `vector.road_maharashtra`). However, the solver was treating these values as **meters** and applying a conversion formula:
+
+```python
+# BEFORE
+travel_time = dist_matrix[from_node][to_node] / 666  # Assumed meters -> minutes at 40km/h
+```
+
+Because the input was already seconds, dividing a 30-minute trip (1800 seconds) by 666 resulted in ~2.7 minutes of travel time. This made every route appear ~10x faster than reality and allowed the solver to pack too many deliveries into a single route.
+
+## Fix Applied
+
+### Fix 1: Corrected Travel Time Conversion
+Converted the time callback to treat distance matrix values as seconds and divide by 60 to get minutes.
+
+```python
+# AFTER
+travel_time = dist_matrix[from_node][to_node] / 60  # seconds -> minutes
+```
+
+### Fix 2: Road-Length Based Distance Calculation
+Previously, `distance_km` was calculated by summing the seconds in the distance matrix and dividing by 1000, which produced meaningless "km" values.
+- **After**: The system now queries the actual road geometry length (`ST_Length(geom::geography)`) for each route segment to calculate high-precision kilometer totals.
+
+## Impact
+
+- **Realistic Schedules**: Arrival times now accurately reflect real-world travel durations (seconds to minutes).
+- **Correct Route Density**: The solver no longer over-packs vehicles by underestimating travel time.
+- **Precise Distance Reporting**: Total km traveled now matches the actual road paths visualized on the map.
+
+---
+
+# Bug Fix: Vehicle Shift Cross-Midnight Logic
+
+## Problem
+
+Vehicles with overnight shifts (e.g., 8:00 AM to 01:04 AM) were having their routes truncated or reset. The solver would see the `01:04` end time as being numerically smaller than the `08:00` start time and flag it as an error, resetting the vehicle to a default 9-hour window.
+
+## Root Cause Analysis
+
+The solver was comparing relative minutes from midnight on the *same day*.
+- `08:00 AM` = 480 minutes
+- `01:04 AM` = 64 minutes
+- Since `64 < 480`, the logic `end_avail < start_avail` triggered a manual fix that overwrote the user's configuration.
+
+## Fix Applied
+
+### Fix 1: Temporal Normalization
+Implemented a normalization step during vehicle initialization in `backend/vrp_solver.py`:
+
+```python
+# If end is numerically smaller than start, it crosses midnight.
+# Add 1440 minutes (24 hours) to the end time to offset it to the next day.
+if end < start:
+    end += 1440
+```
+
+### Fix 2: Dynamic Dimension Scaling
+Updated the `absolute_max` calculation for the solver's Time dimension to ensure it spans the full duration of these extended multi-day shifts.
+
+## Impact
+
+- **Full Shift Utilization**: Vehicles can now correctly be assigned deliveries late into the night and early the next morning.
+- **Accurate Next-Day Arrival**: The UI correctly displays these arrival times with a **"(+1 Day)"** indicator, ensuring the user and senior stakeholders see realistic schedules.
+
+
