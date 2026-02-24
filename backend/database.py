@@ -98,66 +98,60 @@ def safe_int(val, default=0):
         return default
 
 def insert_stations_from_dataframe(conn, df: pd.DataFrame, warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725):
-    """Insert station data from uploaded DataFrame to station_node_map table."""
+    """Insert station data from uploaded DataFrame to station_node_map table using batch snapping."""
     cur = conn.cursor()
     
-    # Pre-fetch all nodes in main component (component 11)
+    # 1. Clear existing
+    cur.execute("TRUNCATE TABLE vector.station_node_map;")
+    
+    # 2. Create temp table for raw inputs
+    cur.execute("DROP TABLE IF EXISTS temp_input_stations;")
     cur.execute("""
-        CREATE TEMP TABLE IF NOT EXISTS temp_main_component_nodes AS
-        SELECT m.node, r.geom
-        FROM pgr_connectedComponents('SELECT gid AS id, source, target, cost FROM vector.road_maharashtra') m
-        JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node)
-        WHERE m.component = 11
-        GROUP BY m.node, r.geom;
-        CREATE INDEX IF NOT EXISTS idx_temp_main_nodes_geom ON temp_main_component_nodes USING GIST (geom);
+        CREATE TEMP TABLE temp_input_stations (
+            station_id TEXT,
+            lat DOUBLE PRECISION,
+            lon DOUBLE PRECISION,
+            weight INT,
+            service_time INT,
+            window_start INT,
+            window_end INT
+        );
     """)
     
-    print(f"DEBUG: Entering insert_stations_from_dataframe. df length: {len(df)}")
-    inserted_count = 0
-    for i, row in df.iterrows():
-        try:
-            station_id = str(row['id'])
-            lat = float(row['latitude'])
-            lon = float(row['longitude'])
-            
-            weight = safe_int(row.get('parcel_weight'), 20)
-            service_time = safe_int(row.get('service_time'), 10)
-            window_start = safe_int(row.get('window_start'), 420)
-            raw_we = row.get('window_end_minutes', row.get('window_end', 600))
-            window_end = safe_int(raw_we, 600)
-            
-            cur.execute("""
-                INSERT INTO vector.station_node_map (station_id, nearest_node_id, parcel_weight, service_time, window_start, window_end, geom)
-                SELECT 
-                    %s,
-                    COALESCE(
-                        (SELECT node 
-                         FROM temp_main_component_nodes
-                         ORDER BY geom <-> ST_SetSRID(ST_Point(%s, %s), 4326) 
-                         LIMIT 1),
-                        (SELECT node 
-                         FROM temp_main_component_nodes
-                         LIMIT 1)
-                    ),
-                    %s, %s, %s, %s,
-                    ST_SetSRID(ST_Point(%s, %s), 4326)
-                RETURNING nearest_node_id
-            """, (station_id, lon, lat, weight, service_time, window_start, window_end, lon, lat))
-            
-            result = cur.fetchone()
-            if result and result[0] is not None:
-                inserted_count += 1
-            else:
-                print(f"⚠️  Station {station_id} could not be snapped to road network")
-                
-        except Exception as e:
-            import traceback
-            print(f"❌ ERROR processing row {i}: {e}")
-            traceback.print_exc()
-            continue
+    # 3. Bulk insert inputs
+    data = []
+    for _, row in df.iterrows():
+        raw_we = row.get('window_end_minutes', row.get('window_end', 600))
+        data.append((
+            str(row['id']),
+            float(row['latitude']),
+            float(row['longitude']),
+            safe_int(row.get('parcel_weight'), 20),
+            safe_int(row.get('service_time'), 10),
+            safe_int(row.get('window_start'), 420),
+            safe_int(raw_we, 600)
+        ))
     
-    print(f"DEBUG: Inserted {inserted_count} out of {len(df)} stations into station_node_map")
-    cur.execute("DROP TABLE IF EXISTS temp_main_component_nodes;")
+    from psycopg2.extras import execute_values
+    execute_values(cur, """
+        INSERT INTO temp_input_stations (station_id, lat, lon, weight, service_time, window_start, window_end)
+        VALUES %s
+    """, data)
+    
+    # 4. Snap using persistent vector.main_road_nodes (MUCH FASTER)
+    cur.execute("""
+        INSERT INTO vector.station_node_map (station_id, nearest_node_id, parcel_weight, service_time, window_start, window_end, geom)
+        SELECT 
+            s.station_id,
+            (SELECT node_id 
+             FROM vector.main_road_nodes
+             ORDER BY geom <-> ST_SetSRID(ST_Point(s.lon, s.lat), 4326) 
+             LIMIT 1),
+            s.weight, s.service_time, s.window_start, s.window_end,
+            ST_SetSRID(ST_Point(s.lon, s.lat), 4326)
+        FROM temp_input_stations s;
+    """)
+    
     conn.commit()
     cur.close()
 
@@ -180,35 +174,49 @@ def randomize_station_attributes(conn):
     cur.close()
 
 def calculate_distance_matrix(conn, warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725):
-    """Calculate distance matrix."""
+    """Calculate distance matrix using spatial filtering to avoid loading 800k roads."""
     cur = conn.cursor()
     cur.execute("TRUNCATE TABLE vector.distance_matrix;")
     warehouse_node = get_warehouse_node(conn, warehouse_lon, warehouse_lat)
-    cur.execute("SELECT DISTINCT nearest_node_id FROM vector.station_node_map WHERE nearest_node_id IS NOT NULL")
-    station_nodes = [row[0] for row in cur.fetchall()]
-    all_nodes = station_nodes + [warehouse_node]
     
+    # Get bounding box of all stations to avoid subquery in Dijkstra
+    cur.execute("SELECT ST_Extent(geom) FROM vector.station_node_map")
+    extent = cur.fetchone()[0]
+    if not extent:
+        cur.close()
+        return
+
+    # Get all nodes
+    cur.execute("""
+        SELECT nearest_node_id FROM vector.station_node_map WHERE nearest_node_id IS NOT NULL
+        UNION 
+        SELECT %s as nearest_node_id
+    """, (warehouse_node,))
+    all_nodes = [row[0] for row in cur.fetchall() if row[0] is not None]
+
+    # Spatial Filter: Pass extent as literal to pgRouting
     cur.execute("""
         INSERT INTO vector.distance_matrix (start_vid, end_vid, agg_cost)
         SELECT start_vid, end_vid, agg_cost
         FROM pgr_dijkstraCost(
-            'SELECT gid AS id, source, target, COALESCE(live_cost_s, cost_s) AS cost FROM vector.road_maharashtra WHERE live_cost_s IS NOT NULL OR cost_s IS NOT NULL',
+            format('SELECT gid AS id, source, target, COALESCE(live_cost_s, cost_s) AS cost 
+                    FROM vector.road_maharashtra 
+                    WHERE geom && ST_Expand(ST_SetSRID(%%L::box2d::geometry, 4326), 0.3)', %s),
             %s::bigint[],
             %s::bigint[],
             directed := false
         )
-    """, (all_nodes, all_nodes))
+    """, (extent, all_nodes, all_nodes))
     conn.commit()
     cur.close()
 
 def get_warehouse_node(conn, warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) -> int:
+    """Get nearest road node for warehouse using persistent table."""
     cur = conn.cursor()
     cur.execute(f"""
-        SELECT m.node FROM pgr_connectedComponents(
-            'SELECT gid AS id, source, target, cost FROM vector.road_maharashtra'
-        ) m JOIN vector.road_maharashtra r ON (r.source = m.node OR r.target = m.node) 
-        WHERE m.component = 11 
-        ORDER BY r.geom <-> ST_SetSRID(ST_Point({warehouse_lon}, {warehouse_lat}), 4326) 
+        SELECT node_id 
+        FROM vector.main_road_nodes
+        ORDER BY geom <-> ST_SetSRID(ST_Point({warehouse_lon}, {warehouse_lat}), 4326) 
         LIMIT 1;
     """)
     result = cur.fetchone()
@@ -240,50 +248,72 @@ def fetch_distance_matrix(conn, node_ids: List[int]) -> Dict[Tuple[int, int], fl
     cur.close()
     return {(int(row[0]), int(row[1])): float(row[2]) for row in rows}
 
-def save_route_geometry(conn, vehicle_id: int, route_nodes: List[int]):
-    """Save route geometry per stop-pair segment with traffic factor.
-    
-    Each segment (stop A → stop B) is saved as a separate row so the
-    frontend can color-code by congestion level.
+def save_all_route_geometries(conn, all_routes_data: List[Dict[str, Any]]):
+    """
+    Save route geometries for ALL vehicles in a single large query using true global batching.
+    all_routes_data: List of {'vehicle_id': int, 'route_nodes': List[int]}
     """
     cur = conn.cursor()
-    cur.execute("DELETE FROM vector.route_geometries WHERE vehicle_id = %s", (vehicle_id,))
-    if len(route_nodes) < 2:
-        cur.close()
-        return
+    cur.execute("TRUNCATE TABLE vector.route_geometries;")
     
-    # Ensure the table has the traffic columns (idempotent)
+    # Ensure columns exist
     cur.execute("""
         ALTER TABLE vector.route_geometries 
         ADD COLUMN IF NOT EXISTS segment_index integer DEFAULT 0,
         ADD COLUMN IF NOT EXISTS avg_traffic_factor real DEFAULT 1.0;
     """)
     
-    for seg_idx in range(len(route_nodes) - 1):
-        start_node = route_nodes[seg_idx]
-        end_node = route_nodes[seg_idx + 1]
-        if start_node == end_node:
-            continue
+    # Filter valid routes
+    routes_to_process = [r for r in all_routes_data if len(r['route_nodes']) >= 2]
+    if not routes_to_process:
+        cur.close()
+        return
+
+    # 1. Get GLOBAL bounding box once (instead of per-vehicle)
+    all_nodes = []
+    for r in routes_to_process:
+        all_nodes.extend(r['route_nodes'])
+    
+    cur.execute("SELECT ST_Extent(geom) FROM vector.main_road_nodes WHERE node_id = ANY(%s)", (list(set(all_nodes)),))
+    global_extent = cur.fetchone()[0]
+    if not global_extent:
+        cur.close()
+        return
+
+    # 2. Process each vehicle using the shared global extent
+    for route_info in routes_to_process:
+        v_id = route_info['vehicle_id']
+        route_nodes = route_info['route_nodes']
+
         cur.execute("""
             INSERT INTO vector.route_geometries (vehicle_id, segment_index, geom, avg_traffic_factor)
             SELECT 
                 %s,
-                %s,
+                s.idx,
                 ST_Multi(ST_Collect(ro.geom ORDER BY di.seq)),
                 COALESCE(AVG(ro.traffic_factor), 1.0)
-            FROM pgr_dijkstra(
-                'SELECT gid AS id, source, target, COALESCE(live_cost_s, cost_s) AS cost 
-                 FROM vector.road_maharashtra 
-                 WHERE live_cost_s IS NOT NULL OR cost_s IS NOT NULL',
-                %s, %s, false
+            FROM (
+                SELECT idx - 1 as idx, route[idx] as start_node, route[idx+1] as end_node
+                FROM generate_series(1, array_length(%s::bigint[], 1) - 1) idx
+                CROSS JOIN (SELECT %s::bigint[] as route) r
+            ) s
+            CROSS JOIN LATERAL pgr_dijkstra(
+                format('SELECT gid AS id, source, target, COALESCE(live_cost_s, cost_s) AS cost 
+                        FROM vector.road_maharashtra 
+                        WHERE geom && ST_Expand(ST_SetSRID(%%L::box2d::geometry, 4326), 0.1)', %s),
+                s.start_node, s.end_node, false
             ) AS di
             JOIN vector.road_maharashtra ro ON di.edge = ro.gid
             WHERE ro.geom IS NOT NULL
-            HAVING ST_Collect(ro.geom ORDER BY di.seq) IS NOT NULL;
-        """, (vehicle_id, seg_idx, start_node, end_node))
+            GROUP BY s.idx, s.start_node, s.end_node;
+        """, (v_id, route_nodes, route_nodes, global_extent))
     
     conn.commit()
     cur.close()
+
+def save_route_geometry(conn, vehicle_id: int, route_nodes: List[int]):
+    """Compatibility wrapper for save_route_geometry."""
+    save_all_route_geometries(conn, [{'vehicle_id': vehicle_id, 'route_nodes': route_nodes}])
 
 def fetch_route_geometries_geojson(conn) -> Dict[str, Any]:
     cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -342,33 +372,73 @@ def fetch_results_summary(conn) -> Dict[str, Any]:
     return {"vehicles": vehicles, "total_vehicles": len(vehicles), "total_deliveries": sum(v['parcel_count'] for v in vehicles), "total_distance_km": sum(v['total_km'] for v in vehicles)}
 
 def update_road_traffic_factor(conn, lat: float, lon: float, factor: float, radius_km: float = 2.0):
+    """Legacy single-point update. Use batch_update_traffic_factors for performance."""
+    batch_update_traffic_factors(conn, [(lat, lon, factor, radius_km)])
+
+def batch_update_traffic_factors(conn, updates: List[tuple]):
     """
-    Update traffic_factor for roads within a radius of a point.
-    Then recalculate live_cost_s.
+    Batch update traffic_factor for roads near multiple points in ONE query.
+    updates: List of (lat, lon, factor, radius_km) tuples.
+    Uses geometry bounding box (&&) with ST_Expand for spatial index usage.
     """
+    if not updates:
+        return
     cur = conn.cursor()
     try:
+        # 1. Create temp table with all update points
+        cur.execute("DROP TABLE IF EXISTS _tmp_traffic_updates;")
         cur.execute("""
-            UPDATE vector.road_maharashtra 
-            SET traffic_factor = %s,
-                live_cost_s = cost_s * %s,
-                live_reverse_cost_s = reverse_cost_s * %s,
+            CREATE TEMP TABLE _tmp_traffic_updates (
+                lat DOUBLE PRECISION,
+                lon DOUBLE PRECISION, 
+                factor REAL,
+                radius_deg DOUBLE PRECISION
+            );
+        """)
+        
+        # 2. Bulk insert - convert km to degrees (at ~19°N: 1km ≈ 0.01 deg)
+        from psycopg2.extras import execute_values
+        execute_values(cur, """
+            INSERT INTO _tmp_traffic_updates (lat, lon, factor, radius_deg) VALUES %s
+        """, [(lat, lon, factor, radius_km * 0.01) for lat, lon, factor, radius_km in updates])
+        
+        # 3. Add a spatial index on the temp point geometries for the join
+        cur.execute("""
+            ALTER TABLE _tmp_traffic_updates ADD COLUMN geom geometry(Point, 4326);
+        """)
+        cur.execute("""
+            UPDATE _tmp_traffic_updates SET geom = ST_SetSRID(ST_Point(lon, lat), 4326);
+        """)
+        cur.execute("""
+            CREATE INDEX ON _tmp_traffic_updates USING GIST (geom);
+        """)
+        
+        # 4. Single spatial join using && (bounding box) — uses GiST index on road_maharashtra
+        cur.execute("""
+            UPDATE vector.road_maharashtra r
+            SET traffic_factor = t.max_factor,
+                live_cost_s = r.cost_s * t.max_factor,
+                live_reverse_cost_s = r.reverse_cost_s * t.max_factor,
                 last_traffic_update = NOW()
-            WHERE ST_DWithin(
-                geom::geography, 
-                ST_SetSRID(ST_Point(%s, %s), 4326)::geography, 
-                %s * 1000
-            )
-        """, (factor, factor, factor, lon, lat, radius_km))
-        conn.commit()
+            FROM (
+                SELECT r2.gid, MAX(u.factor) as max_factor
+                FROM vector.road_maharashtra r2
+                JOIN _tmp_traffic_updates u
+                ON r2.geom && ST_Expand(u.geom, u.radius_deg)
+                GROUP BY r2.gid
+            ) t
+            WHERE r.gid = t.gid;
+        """)
+        
+        cur.execute("DROP TABLE IF EXISTS _tmp_traffic_updates;")
     except Exception as e:
-        print(f"❌ Error updating traffic factor in DB: {e}")
+        print(f"❌ Error in batch traffic update: {e}")
         conn.rollback()
     finally:
         cur.close()
 
 def reset_traffic_factors(conn):
-    """Reset all traffic factors to 1.0"""
+    """Reset only roads that were previously modified (not all 843K roads)."""
     cur = conn.cursor()
     try:
         cur.execute("""
@@ -376,7 +446,8 @@ def reset_traffic_factors(conn):
             SET traffic_factor = 1.0,
                 live_cost_s = cost_s,
                 live_reverse_cost_s = reverse_cost_s,
-                last_traffic_update = NULL;
+                last_traffic_update = NULL
+            WHERE last_traffic_update IS NOT NULL;
         """)
         conn.commit()
     except Exception as e:

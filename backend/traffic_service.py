@@ -94,6 +94,57 @@ class TomTomTrafficService:
 
         return 1.0  # Safe default: no penalty
 
+    async def get_traffic_factor_async(self, lat: float, lon: float, client: Optional['httpx.AsyncClient'] = None) -> float:
+        """Async version of get_traffic_factor using httpx."""
+        if not self.api_key or self._api_reachable is False:
+            return 1.0
+
+        import httpx
+        try:
+            params = {
+                "key": self.api_key,
+                "point": f"{lat},{lon}",
+                "unit": "KMPH",
+            }
+
+            if client:
+                response = await client.get(TOMTOM_FLOW_URL, params=params, timeout=8)
+            else:
+                async with httpx.AsyncClient() as c:
+                    response = await c.get(TOMTOM_FLOW_URL, params=params, timeout=8)
+
+            if response.status_code == 200:
+                self._api_reachable = True
+                data = response.json()
+                flow = data.get("flowSegmentData", {})
+
+                current_speed = flow.get("currentSpeed", 0)
+                free_flow_speed = flow.get("freeFlowSpeed", 0)
+
+                if current_speed > 0 and free_flow_speed > 0:
+                    factor = free_flow_speed / current_speed
+                    factor = round(min(max(factor, 0.8), 10.0), 3)
+                    return factor
+
+                return 1.0
+
+            elif response.status_code == 404:
+                return 1.0
+            else:
+                print(f"⚠️  TomTom API error {response.status_code}")
+                if response.status_code in (401, 403):
+                    self._api_reachable = False
+
+        except Exception as exc:
+            print(f"⚠️  Async traffic error: {exc}")
+
+        return 1.0
+
+    async def get_station_traffic_factor_async(self, station_lat: float, station_lon: float, client: Optional['httpx.AsyncClient'] = None) -> float:
+        """Async version of get_station_traffic_factor."""
+        return await self.get_traffic_factor_async(station_lat, station_lon, client)
+
+
     def get_station_traffic_factor(self, station_lat: float, station_lon: float,
                                    **kwargs) -> float:
         """

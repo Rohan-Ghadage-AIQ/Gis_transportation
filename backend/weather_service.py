@@ -193,24 +193,102 @@ class OpenWeatherService:
 
         return default
 
-    def get_bulk_weather(self, locations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Get weather for multiple station locations.
+    async def get_weather_async(self, lat: float, lon: float, client: Optional['httpx.AsyncClient'] = None) -> Dict[str, Any]:
+        """Async version of get_weather using httpx."""
+        if self.simulate_rain:
+            return self._simulate_monsoon(lat, lon)
 
-        Args:
-            locations: list of dicts with 'station_id', 'latitude', 'longitude'
+        default = {
+            "rain_mm": 0.0,
+            "description": "Unknown",
+            "weather_main": "Unknown",
+            "severity": "none",
+            "penalty_factor": 1.0,
+            "temp_c": 0.0,
+            "humidity": 0,
+            "wind_speed": 0.0,
+        }
 
-        Returns:
-            list of weather dicts with station_id included
-        """
-        results = []
-        for loc in locations:
-            weather = self.get_weather(loc["latitude"], loc["longitude"])
-            weather["station_id"] = loc["station_id"]
-            weather["lat"] = loc["latitude"]
-            weather["lon"] = loc["longitude"]
-            results.append(weather)
-        return results
+        if not self.api_key or self._api_reachable is False:
+            return default
+
+        import httpx
+        try:
+            params = {
+                "lat": lat,
+                "lon": lon,
+                "appid": self.api_key,
+                "units": "metric",
+            }
+
+            if client:
+                response = await client.get(OWM_URL, params=params, timeout=8)
+            else:
+                async with httpx.AsyncClient() as c:
+                    response = await c.get(OWM_URL, params=params, timeout=8)
+
+            if response.status_code == 200:
+                self._api_reachable = True
+                data = response.json()
+
+                rain_mm = 0.0
+                if "rain" in data:
+                    rain_mm = data["rain"].get("1h", data["rain"].get("3h", 0.0))
+                if "thunderstorm" in str(data.get("weather", [{}])[0].get("main", "")).lower():
+                    rain_mm = max(rain_mm, 5.0)
+
+                weather_info = data.get("weather", [{}])[0]
+                description = weather_info.get("description", "Unknown").title()
+                weather_main = weather_info.get("main", "Unknown")
+
+                if rain_mm >= RAIN_MODERATE:
+                    severity = "heavy"
+                    penalty = PENALTY_SEVERE
+                    description = f"Heavy Rain ({rain_mm:.1f} mm/hr)"
+                elif rain_mm >= RAIN_LIGHT:
+                    severity = "moderate"
+                    penalty = PENALTY_MODERATE
+                    description = f"Moderate Rain ({rain_mm:.1f} mm/hr)"
+                else:
+                    severity = "none"
+                    penalty = 1.0
+
+                return {
+                    "rain_mm": round(rain_mm, 2),
+                    "description": description,
+                    "weather_main": weather_main,
+                    "severity": severity,
+                    "penalty_factor": penalty,
+                    "temp_c": round(data.get("main", {}).get("temp", 0), 1),
+                    "humidity": data.get("main", {}).get("humidity", 0),
+                    "wind_speed": round(data.get("wind", {}).get("speed", 0), 1),
+                }
+            elif response.status_code == 429:
+                print("⚠️  OpenWeatherMap rate limit reached")
+            else:
+                print(f"⚠️  OpenWeatherMap error {response.status_code}")
+                if response.status_code in (401, 403):
+                    self._api_reachable = False
+
+        except Exception as exc:
+            print(f"⚠️  Async weather error: {exc}")
+
+        return default
+
+    async def get_bulk_weather_async(self, locations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Fetch weather for multiple locations in parallel."""
+        import httpx
+        import asyncio
+        
+        async with httpx.AsyncClient() as client:
+            tasks = [self.get_weather_async(loc["latitude"], loc["longitude"], client) for loc in locations]
+            results = await asyncio.gather(*tasks)
+            
+            for i, res in enumerate(results):
+                res["station_id"] = locations[i]["station_id"]
+                res["lat"] = locations[i]["latitude"]
+                res["lon"] = locations[i]["longitude"]
+            return results
 
 
 # Singleton instance — imported by vrp_solver

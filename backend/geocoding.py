@@ -17,38 +17,19 @@ KRUTRIM_API_URL = "https://api.olakrutrim.com/v1/geocode"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
 
-def geocode_address_krutrim(address: str) -> Optional[Dict]:
-    """
-    Geocode a single address using Ola Krutrim API
-    
-    Args:
-        address: Full address string
-        
-    Returns:
-        {
-            "latitude": float,
-            "longitude": float,
-            "formatted_address": str,
-            "confidence": float,
-            "source": "krutrim"
-        }
-        or None if geocoding fails
-    """
+async def geocode_address_krutrim_async(address: str, client: 'httpx.AsyncClient') -> Optional[Dict]:
+    """Async geocode using Ola Krutrim API."""
     if not KRUTRIM_API_KEY:
-        print("Warning: KRUTRIM_API_KEY not set, skipping Krutrim geocoding")
         return None
     
     try:
-        response = requests.post(
+        response = await client.post(
             KRUTRIM_API_URL,
             headers={
                 "Authorization": f"Bearer {KRUTRIM_API_KEY}",
                 "Content-Type": "application/json"
             },
-            json={
-                "address": address,
-                "region": "IN"
-            },
+            json={"address": address, "region": "IN"},
             timeout=10
         )
         
@@ -63,14 +44,9 @@ def geocode_address_krutrim(address: str) -> Optional[Dict]:
                     "confidence": float(result.get("confidence", 1.0)),
                     "source": "krutrim"
                 }
-        else:
-            print(f"Krutrim API error {response.status_code}: {response.text}")
-        
-        return None
-        
     except Exception as e:
-        print(f"Krutrim geocoding error for '{address}': {e}")
-        return None
+        print(f"Krutrim async error: {e}")
+    return None
 
 
 def simplify_address_for_nominatim(address: str) -> str:
@@ -109,26 +85,13 @@ def simplify_address_for_nominatim(address: str) -> str:
     return simplified.strip()
 
 
-def geocode_address_nominatim(address: str) -> Optional[Dict]:
-    """
-    Geocode using Nominatim (OpenStreetMap) as fallback
-    
-    Args:
-        address: Full address string
-        
-    Returns:
-        Geocoded result or None
-    """
+async def geocode_address_nominatim_async(address: str, client: 'httpx.AsyncClient') -> Optional[Dict]:
+    """Async geocode using Nominatim."""
     try:
-        # Simplify address for better Nominatim results
         simplified_address = simplify_address_for_nominatim(address)
-        
-        # Add "India" to improve accuracy
         search_query = f"{simplified_address}, India"
         
-        print(f"  → Nominatim query: {search_query[:80]}...")
-        
-        response = requests.get(
+        response = await client.get(
             NOMINATIM_URL,
             params={
                 "q": search_query,
@@ -136,41 +99,24 @@ def geocode_address_nominatim(address: str) -> Optional[Dict]:
                 "limit": 1,
                 "countrycodes": "in"
             },
-            headers={
-                "User-Agent": "VehicleRoutingSystem/1.0"
-            },
+            headers={"User-Agent": "VehicleRoutingSystem/1.0"},
             timeout=10
         )
         
-        print(f"  → Nominatim status: {response.status_code}")
-        
         if response.status_code == 200:
             data = response.json()
-            print(f"  → Nominatim results: {len(data) if data else 0} found")
-            
             if data and len(data) > 0:
                 result = data[0]
-                geocoded = {
+                return {
                     "latitude": float(result["lat"]),
                     "longitude": float(result["lon"]),
                     "formatted_address": result.get("display_name", address),
                     "confidence": float(result.get("importance", 0.5)),
                     "source": "nominatim"
                 }
-                print(f"  → Success: {geocoded['latitude']:.6f}, {geocoded['longitude']:.6f}")
-                return geocoded
-            else:
-                print(f"  → No results returned from Nominatim")
-        else:
-            print(f"  → Nominatim HTTP error: {response.status_code}")
-        
-        return None
-        
     except Exception as e:
-        print(f"Nominatim geocoding error for '{address}': {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+        print(f"Nominatim async error: {e}")
+    return None
 
 
 def geocode_address(address: str, use_cache: bool = True) -> Optional[Dict]:
@@ -221,66 +167,50 @@ def geocode_address(address: str, use_cache: bool = True) -> Optional[Dict]:
     return result
 
 
-def batch_geocode(addresses: List[str], progress_callback=None) -> List[Dict]:
-    """
-    Geocode multiple addresses with progress tracking
+async def batch_geocode(addresses: List[str]) -> List[Dict]:
+    """Geocode multiple addresses in parallel with rate limiting."""
+    import asyncio
+    import httpx
+    from geocode_cache import get_cached_geocode, save_to_cache
     
-    Args:
-        addresses: List of address strings
-        progress_callback: Optional callback function(current, total, address)
-        
-    Returns:
-        List of results with structure:
-        [
-            {
-                "address": str,
-                "latitude": float or None,
-                "longitude": float or None,
-                "formatted_address": str,
-                "confidence": float,
-                "source": str,
-                "error": str (if failed)
-            }
-        ]
-    """
-    results = []
-    total = len(addresses)
+    results_map = {}
+    remaining_addresses = []
     
-    for i, address in enumerate(addresses):
-        current = i + 1
-        
-        # Progress callback
-        if progress_callback:
-            progress_callback(current, total, address)
-        
-        print(f"\n[{current}/{total}] Processing: {address[:60]}...")
-        
-        result = geocode_address(address)
-        
-        if result:
-            results.append({
-                "address": address,
-                "latitude": result["latitude"],
-                "longitude": result["longitude"],
-                "formatted_address": result["formatted_address"],
-                "confidence": result["confidence"],
-                "source": result["source"]
-            })
-            print(f"✓ Success: ({result['latitude']:.6f}, {result['longitude']:.6f}) via {result['source']}")
+    # 1. Check cache first
+    for addr in addresses:
+        cached = get_cached_geocode(addr)
+        if cached:
+            results_map[addr] = cached
         else:
-            # Geocoding failed
-            results.append({
-                "address": address,
-                "latitude": None,
-                "longitude": None,
-                "formatted_address": address,
-                "confidence": 0.0,
-                "source": "none",
-                "error": "Geocoding failed"
-            })
-            print(f"✗ Failed to geocode")
+            remaining_addresses.append(addr)
+            
+    if not remaining_addresses:
+        return [results_map[addr] for addr in addresses]
+        
+    # 2. Parallel Geocode remaining
+    semaphore = asyncio.Semaphore(2) # Limit concurrency to avoid blocking/rate limits
     
-    return results
+    async def geocode_task(addr, client):
+        async with semaphore:
+            # Try Krutrim
+            res = await geocode_address_krutrim_async(addr, client)
+            if not res:
+                # Nominatim rate limit: 1/sec
+                await asyncio.sleep(1)
+                res = await geocode_address_nominatim_async(addr, client)
+            
+            if res:
+                save_to_cache(addr, res)
+                return addr, res
+            return addr, {"latitude": None, "longitude": None, "formatted_address": addr, "confidence": 0.0, "source": "none", "error": "Failed"}
+
+    async with httpx.AsyncClient() as client:
+        tasks = [geocode_task(addr, client) for addr in remaining_addresses]
+        done = await asyncio.gather(*tasks)
+        for addr, res in done:
+            results_map[addr] = res
+            
+    return [results_map[addr] for addr in addresses]
 
 
 def validate_coordinates(lat: float, lon: float) -> bool:

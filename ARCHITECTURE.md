@@ -1349,6 +1349,11 @@ cur.execute("TRUNCATE TABLE vector.unassigned_parcels")  # Clear on new computat
 6. **Report Generation**: Fixed non-existent table references in report queries
 7. **Route Geometry Display**: Corrected field name from 'routes' to 'route_geometry'
 8. **Parcel Marker Display**: Fixed array indices for coordinate extraction
+9. **Batch Traffic Update**: Replaced 86 individual `ST_DWithin(geography)` calls with a single batch spatial join using `&&` operator, reducing traffic sync from 234s to 0.9s (254x faster). See [BUGFIX.md](file:///c:/Users/91832/Desktop/AIQ/GisTransportation4/BUGFIX.md).
+
+## ⚡ Performance
+
+The VRP computation pipeline has been optimized from **~286s to ~42s** (6.8x faster) for 56 parcels and 10 vehicles. Key optimizations include batch spatial updates, parallel API calls, spatial filtering, and solver tuning. Full details in [ARCHITECTURE_PERFORMANCE_SECTION.md](file:///c:/Users/91832/Desktop/AIQ/GisTransportation4/ARCHITECTURE_PERFORMANCE_SECTION.md) and [BUGFIX.md](file:///c:/Users/91832/Desktop/AIQ/GisTransportation4/BUGFIX.md).
 
 ---
 

@@ -11,6 +11,7 @@ import io
 import os
 from dotenv import load_dotenv
 import json
+import time
 from datetime import datetime
 
 # Import database and solver modules
@@ -218,7 +219,7 @@ async def upload_file(file: UploadFile = File(...)):
             print(f"Total addresses to geocode: {len(addresses)}\n")
             
             # Batch geocode all addresses
-            geocoded_results = batch_geocode(addresses)
+            geocoded_results = await batch_geocode(addresses)
             
             # Add geocoded coordinates to dataframe
             df['latitude'] = [r.get('latitude') for r in geocoded_results]
@@ -430,20 +431,23 @@ async def compute_routes():
             print(f"DEBUG: first row window_end: {uploaded_data.iloc[0].get('window_end')}")
             print(f"DEBUG: first row window_end_minutes: {uploaded_data.iloc[0].get('window_end_minutes')}")
         
+        t_step2 = time.perf_counter()
         insert_stations_from_dataframe(conn, uploaded_data)
-        print("✓ Stations inserted")
+        print(f"✓ Stations inserted (took {time.perf_counter() - t_step2:.2f}s)")
         
         # Step 3: Randomize attributes (optional, can be removed if data is already complete)
         # randomize_station_attributes(conn)
         
         # Step 4: Calculate distance matrix
         print("\n[Step 3/5] Calculating distance matrix via pgRouting...")
+        t_step3 = time.perf_counter()
         calculate_distance_matrix(conn, warehouse_config["longitude"], warehouse_config["latitude"])
-        print("✓ Distance matrix calculated")
+        print(f"✓ Distance matrix calculated (took {time.perf_counter() - t_step3:.2f}s)")
         
         # Step 5: Solve VRP
         print("\n[Step 4/5] Solving VRP with OR-Tools...")
-        vrp_result = solve_vrp(warehouse_config["longitude"], warehouse_config["latitude"])
+        t_step4 = time.perf_counter()
+        vrp_result = await solve_vrp(warehouse_config["longitude"], warehouse_config["latitude"])
         
         # Save transient metadata for the results API
         global LAST_VRP_METADATA
@@ -452,7 +456,7 @@ async def compute_routes():
             "weather_rerouted": vrp_result.get("weather_rerouted", False),
             "rerouted_vehicles": vrp_result.get("rerouted_vehicles", [])
         }
-        print("✓ VRP solved")
+        print(f"✓ VRP solved (took {time.perf_counter() - t_step4:.2f}s)")
         
         print("\n" + "="*60)
         print("VRP COMPUTATION COMPLETED SUCCESSFULLY")
@@ -781,7 +785,7 @@ async def refresh_traffic():
     """Trigger a re-solve with live traffic data and return reroute info"""
     try:
         # 1. Re-run VRP with live traffic (solve_vrp creates & closes its own conn)
-        solve_results = solve_vrp(warehouse_config["longitude"], warehouse_config["latitude"])
+        solve_results = await solve_vrp(warehouse_config["longitude"], warehouse_config["latitude"])
         
         # 2. Fetch all results using a fresh DB connection
         result_conn = get_db_connection()

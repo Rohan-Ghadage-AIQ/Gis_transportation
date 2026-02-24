@@ -12,17 +12,22 @@ from database import (
     fetch_distance_matrix,
     save_route_geometry,
     update_road_traffic_factor,
+    batch_update_traffic_factors,
     reset_traffic_factors,
     get_current_route_states
 )
 
 
-def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) -> Dict[str, Any]:
+async def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) -> Dict[str, Any]:
     """
     Solve the Vehicle Routing Problem with time windows and capacity constraints.
     Returns a dictionary with solution details including routes, costs, and statistics.
     Includes 'rerouted_vehicles' if traffic caused changes.
     """
+    import asyncio
+    import httpx
+    import time as _time
+    _t_total = _time.perf_counter()
     conn = get_db_connection()
     # 0. Capture current state for delta detection
     old_states = get_current_route_states(conn)
@@ -36,101 +41,74 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         conn.close()
         return {"success": False, "error": "No station data found"}
     
-    # --- LIVE TRAFFIC UPDATE via TomTom ---
+    # --- PARALLEL TRAFFIC & WEATHER UPDATE ---
     tomtom_key = os.getenv("TOMTOM_API_KEY", "")
-    if tomtom_key:
-        # Reset all traffic factors to 1.0 before fresh sync
-        reset_traffic_factors(conn)
-        print("🚦 Syncing live traffic from TomTom...")
-        print("   ┌─────────┬──────────────────────┬─────────┬──────────────────┐")
-        print("   │ Station │ Location             │ Factor  │ Status           │")
-        print("   ├─────────┼──────────────────────┼─────────┼──────────────────┤")
-        tried = 0
-        updated = 0
-        try:
-            # Sample up to 15 stations to stay within API limits
-            for s in stations[:15]:
-                tried += 1
-                factor = traffic_service.get_station_traffic_factor(
-                    s['latitude'], s['longitude']
-                )
-                if factor != 1.0:
-                    update_road_traffic_factor(
-                        conn, s['latitude'], s['longitude'], factor, radius_km=1.5
-                    )
-                    updated += 1
-                    # Show severity
-                    if factor >= 2.0:
-                        severity = "🔴 HEAVY"
-                    elif factor >= 1.5:
-                        severity = "🟠 MODERATE"
-                    elif factor >= 1.2:
-                        severity = "🟡 LIGHT"
-                    else:
-                        severity = "🟢 FREE FLOW"
-                    print(f"   │ {s['station_id']:>7} │ {s['latitude']:>9.4f},{s['longitude']:>9.4f} │ {factor:>6.2f}x │ {severity:<16} │")
-                else:
-                    print(f"   │ {s['station_id']:>7} │ {s['latitude']:>9.4f},{s['longitude']:>9.4f} │  1.00x │ 🟢 FREE FLOW     │")
-            print("   └─────────┴──────────────────────┴─────────┴──────────────────┘")
-            print(f"   ✅ Live traffic sync complete — {updated}/{tried} zones have congestion.")
-        except Exception as e:
-            print(f"⚠️ Traffic sync failed, using static costs: {e}")
-    else:
-        print("ℹ️ TOMTOM_API_KEY not set — using static road costs.")
-    # ---------------------------
-
-    # --- LIVE WEATHER CHECK via OpenWeatherMap ---
-    weather_alerts = []
     owm_key = os.getenv("OPENWEATHER_API_KEY", "")
-    if owm_key:
-        print("\n🌦️  Checking live weather from OpenWeatherMap...")
-        print("   ┌─────────┬──────────────────────┬──────────┬──────────┬──────────────────┐")
-        print("   │ Station │ Location             │ Rain mm/h│ Penalty  │ Severity         │")
-        print("   ├─────────┼──────────────────────┼──────────┼──────────┼──────────────────┤")
-        weather_tried = 0
-        weather_affected = 0
-        try:
-            # Check weather for all stations (OpenWeatherMap free tier: 60 calls/min)
-            for s in stations[:30]:
-                weather_tried += 1
-                weather = weather_service.get_weather(s['latitude'], s['longitude'])
-
-                if weather["severity"] != "none":
-                    weather_affected += 1
-                    # Apply weather penalty to road segments near this station
-                    # This stacks with any traffic penalties already applied
-                    update_road_traffic_factor(
-                        conn, s['latitude'], s['longitude'],
-                        weather["penalty_factor"], radius_km=2.0
-                    )
-
-                    severity_icon = "🔴 HEAVY" if weather["severity"] == "heavy" else "🟠 MODERATE"
-                    print(f"   │ {s['station_id']:>7} │ {s['latitude']:>9.4f},{s['longitude']:>9.4f} │ {weather['rain_mm']:>7.1f} │ {weather['penalty_factor']:>7.1f}x │ {severity_icon:<16} │")
-
-                    # Collect alert for frontend
-                    weather_alerts.append({
-                        "station_id": str(s['station_id']),
-                        "lat": s['latitude'],
-                        "lon": s['longitude'],
-                        "rain_mm": weather["rain_mm"],
-                        "description": weather["description"],
-                        "severity": weather["severity"],
-                        "temp_c": weather["temp_c"],
-                        "humidity": weather["humidity"],
-                    })
-                else:
-                    print(f"   │ {s['station_id']:>7} │ {s['latitude']:>9.4f},{s['longitude']:>9.4f} │     0.0 │    1.0x │ ☀️ CLEAR          │")
-
-            print("   └─────────┴──────────────────────┴──────────┴──────────┴──────────────────┘")
-            if weather_affected > 0:
-                print(f"   ⛈️  Weather alert: {weather_affected}/{weather_tried} stations affected by rain!")
-                print(f"   🔄 Routes will be adjusted to avoid waterlogging zones.")
-            else:
-                print(f"   ☀️  Weather check complete — no rainfall detected at any station.")
-        except Exception as e:
-            print(f"⚠️ Weather sync failed, proceeding without weather penalties: {e}")
+    weather_alerts = []
+    
+    if tomtom_key or owm_key:
+        _t_sync = _time.perf_counter()
+        print(f"🚦 Syncing live data for {len(stations)} stations...")
+        reset_traffic_factors(conn)
+        print(f"  ⏱ Traffic reset: {_time.perf_counter() - _t_sync:.2f}s")
+        
+        _t_api = _time.perf_counter()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # 1. Prepare traffic tasks (limit to first 30 to stay safe with TomTom daily limits)
+            traffic_tasks = []
+            if tomtom_key:
+                for s in stations[:30]:
+                    traffic_tasks.append(traffic_service.get_station_traffic_factor_async(
+                        s['latitude'], s['longitude'], client
+                    ))
+            
+            # 2. Prepare weather tasks (OpenWeatherMap free tier: 60/min, so we can do all 56)
+            weather_tasks = []
+            if owm_key:
+                for s in stations:
+                    weather_tasks.append(weather_service.get_weather_async(
+                        s['latitude'], s['longitude'], client
+                    ))
+            
+            # Run all in parallel
+            traffic_results = await asyncio.gather(*traffic_tasks, return_exceptions=True) if traffic_tasks else []
+            weather_results = await asyncio.gather(*weather_tasks, return_exceptions=True) if weather_tasks else []
+        print(f"  ⏱ API fetch: {_time.perf_counter() - _t_api:.2f}s")
+        
+        _t_apply = _time.perf_counter()
+        # 3. Collect ALL traffic & weather updates into ONE batch
+        all_updates = []
+        
+        for i, factor in enumerate(traffic_results):
+            if isinstance(factor, Exception):
+                continue
+            if factor != 1.0:
+                s = stations[i]
+                all_updates.append((s['latitude'], s['longitude'], factor, 1.5))
+        
+        for i, weather in enumerate(weather_results):
+            if isinstance(weather, Exception):
+                continue
+            if weather["severity"] != "none":
+                s = stations[i]
+                all_updates.append((s['latitude'], s['longitude'], weather["penalty_factor"], 2.0))
+                
+                weather_alerts.append({
+                    "station_id": str(s['station_id']),
+                    "lat": s['latitude'], "lon": s['longitude'],
+                    "rain_mm": weather["rain_mm"], "description": weather["description"],
+                    "severity": weather["severity"], "temp_c": weather["temp_c"],
+                    "humidity": weather["humidity"]
+                })
+        
+        # ONE single batch DB update instead of 86 individual calls
+        print(f"  📊 Applying {len(all_updates)} traffic/weather updates in 1 batch...")
+        batch_update_traffic_factors(conn, all_updates)
+        conn.commit()
+        print(f"  ⏱ DB apply: {_time.perf_counter() - _t_apply:.2f}s")
+        print(f"✓ Parallel sync complete: {len(traffic_results)} traffic, {len(weather_results)} weather (total {_time.perf_counter() - _t_sync:.2f}s).")
     else:
-        print("ℹ️ OPENWEATHER_API_KEY not set — skipping weather check.")
+        print("ℹ️ API keys missing — skipping live data sync.")
     # ---------------------------
 
 
@@ -270,9 +248,9 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         # Low fixed cost to encourage using ALL vehicles
         routing.SetFixedCostOfVehicle(2000, v)
     
-    # VERY HIGH penalty for dropping parcels — makes it virtually impossible
+    # EXTREMELY HIGH penalty for dropping parcels — effectively infinite
     for i in range(1, size):
-        routing.AddDisjunction([manager.NodeToIndex(i)], 10000000)
+        routing.AddDisjunction([manager.NodeToIndex(i)], 1000000000)
     
     # Cost callback per vehicle
     def create_cost_callback(v_idx):
@@ -293,11 +271,13 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     def demand_cb(from_idx):
         return node_demands[manager.IndexToNode(from_idx)]
     
-    # Capacity dimension
+    # Capacity dimension - slightly relaxed hard limit to ensure assignment
+    # but with heavy soft penalty after actual capacity
+    relaxed_capacities = [max(500, c * 2) for c in vehicle_capacities]
     routing.AddDimensionWithVehicleCapacity(
         routing.RegisterUnaryTransitCallback(demand_cb),
         0,
-        vehicle_capacities,
+        relaxed_capacities,
         True,
         'Capacity'
     )
@@ -305,18 +285,20 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
     capacity_dimension = routing.GetDimensionOrDie('Capacity')
     for i in range(num_vehicles):
         index = routing.End(i)
-        capacity_dimension.SetCumulVarSoftUpperBound(index, 300, 500)
+        # Heavy penalty for exceeding original capacity
+        capacity_dimension.SetCumulVarSoftUpperBound(index, vehicle_capacities[i], 1000000)
     
     # Solve with optimized parameters
+    print(f"  ⏱ Model setup: {_time.perf_counter() - _t_total:.2f}s")
+    _t_solver = _time.perf_counter()
     search_params = pywrapcp.DefaultRoutingSearchParameters()
     search_params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.SAVINGS
     search_params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    search_params.time_limit.seconds = 60
-    search_params.solution_limit = 200
-    search_params.lns_time_limit.seconds = 5
+    search_params.time_limit.seconds = 10
     search_params.log_search = False
     
     solution = routing.SolveWithParameters(search_params)
+    print(f"  ⏱ Solver: {_time.perf_counter() - _t_solver:.2f}s")
     
     if not solution:
         conn.close()
@@ -395,46 +377,55 @@ def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.0725) ->
         
         route_nodes.append(depot_node)
         
-        if len(route_nodes) > 2:
-            save_route_geometry(conn, v_id + 1, route_nodes)
-        
-        # Calculate route distance from saved geometry (real road km)
-        # dist_matrix contains seconds, NOT meters — so we use ST_Length instead
-        cur.execute("""
-            SELECT COALESCE(SUM(ST_Length(geom::geography)) / 1000.0, 0)
-            FROM vector.route_geometries WHERE vehicle_id = %s
-        """, (v_id + 1,))
-        route_distance_km = float(cur.fetchone()[0])
-        
-        total_op_cost = route_distance_km * vehicle_costs_per_km[v_id]
-        
         routes.append({
             "vehicle_id": v_id + 1,
+            "route_nodes": route_nodes, # Keep for batch geometry
             "stops": route_stops,
             "start_time": min_to_clock(start_min),
             "end_time": min_to_clock(return_min),
-            "distance_km": round(route_distance_km, 2),
-            "cost": round(total_op_cost, 2),
-            "weight_kg": total_weight,
-            "capacity_kg": max_cap,
+            "total_weight": total_weight,
+            "max_cap": max_cap,
             "utilization": round(utilization, 1),
             "work_duration_mins": actual_work_time,
             "overtime_mins": overtime
         })
     
-    # ========================================
-    # POST-SOLUTION VALIDATION
-    # ========================================
+    # --- Step 5: Batch Save Geometries ---
+    from database import save_all_route_geometries
+    _t_post = _time.perf_counter()
+    print(f"🛤️ Generating road geometries for {len(routes)} routes...")
+    _t_geom = _time.perf_counter()
+    save_all_route_geometries(conn, [{"vehicle_id": r["vehicle_id"], "route_nodes": r["route_nodes"]} for r in routes])
+    print(f"✓ Geometries generated (took {_time.perf_counter() - _t_geom:.2f}s)")
+
     for route in routes:
         v_id = route["vehicle_id"]
-        v_start, v_end = vehicle_times[v_id - 1]
-        v_start_clock = min_to_clock(v_start)
+        # Calculate route distance from saved geometry (real road km)
+        cur.execute("""
+            SELECT COALESCE(SUM(ST_Length(geom::geography)) / 1000.0, 0)
+            FROM vector.route_geometries WHERE vehicle_id = %s
+        """, (v_id,))
+        route_distance_km = float(cur.fetchone()[0])
+        
+        # vehicle_costs_per_km is indexed by v_id-1
+        cost_per_km = vehicle_costs_per_km[v_id - 1]
+        op_cost = route_distance_km * cost_per_km
+        
+        route["distance_km"] = round(route_distance_km, 2)
+        route["cost"] = round(op_cost, 2)
+        # Clean up internal data before returning
+        del route["route_nodes"]
+        
+        # Print for log visibility
+        v_start_clock = route["start_time"]
+        v_end = vehicle_times[v_id - 1][1]
         v_end_clock = min_to_clock(v_end)
         for stop in route["stops"]:
-            arrival_str = stop["arrival_time"]
             print(f"  ✅ V{v_id} [{v_start_clock}-{v_end_clock}] → "
-                  f"Parcel {stop['station_id']} arrives {arrival_str} ({stop['status']})")
-    
+                  f"Parcel {stop['station_id']} arrives {stop['arrival_time']} ({stop['status']})")
+    print(f"  ⏱ Post-processing: {_time.perf_counter() - _t_post:.2f}s")
+    print(f"  ⏱ TOTAL solve_vrp: {_time.perf_counter() - _t_total:.2f}s")
+
     conn.commit()
     
     # ========================================
