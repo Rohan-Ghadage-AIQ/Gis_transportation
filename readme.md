@@ -1,6 +1,6 @@
 # 🚚 Vehicle Routing Optimization System
 
-A full-stack web application for optimizing vehicle routing with **live traffic integration**, real-time visualization, and delivery fleet management — built with React, FastAPI, PostgreSQL/PostGIS, pgRouting, and TomTom Traffic API.
+A full-stack web application for optimizing vehicle routing with **Google Route Optimization API**, **live traffic integration**, weather simulation, real-time visualization, and delivery fleet management — built with React, FastAPI, PostgreSQL/PostGIS, pgRouting, and multi-source traffic APIs.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
@@ -29,10 +29,11 @@ A full-stack web application for optimizing vehicle routing with **live traffic 
 
 This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP) with time windows and capacity constraints for logistics operations in Maharashtra, India. The system:
 
-- **Optimizes** delivery routes for 10 vehicles using Google OR-Tools
-- **Integrates** real-time traffic data from TomTom to adjust route costs
+- **Optimizes** delivery routes for 10 vehicles using Google Route Optimization API (OAuth2) with OR-Tools fallback
+- **Integrates** real-time traffic data from Google Routes API / TomTom / weather simulation
 - **Calculates** actual road distances using pgRouting on OpenStreetMap data
 - **Visualizes** routes on an interactive map with traffic-colored segments (🟢🟡🟠🔴)
+- **Enforces** vehicle capacity constraints with delivery-only mode (utilization ≤ 100%)
 - **Manages** vehicle capacity, time windows, and service times
 - **Models** realistic departure times with warehouse loading buffers
 - **Provides** real-time statistics and route analytics
@@ -48,8 +49,10 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 - **🆕 100% Accurate Road Times** — travel times calculated using real road speeds (seconds) from pgRouting
 - **🆕 Overnight Shift Support** — robustly handles shifts starting one day and ending the next (e.g., 8:00 AM to 01:00 AM)
 - **🆕 Monsoon Simulation** — test route adjustments and waterlogging avoidance with `WEATHER_SIMULATE_RAIN=true`
-- **🆕 Live traffic-aware routing** via TomTom Flow Segment Data API
-- **🆕 Refresh Traffic** — re-query congestion and re-solve VRP on demand
+- **🆕 Google Route Optimization** — OAuth2 Service Account for industrial-grade VRP solving
+- **🆕 Multi-source traffic** — Google Routes API + TomTom + weather simulation
+- **🆕 Delivery-only capacity** — ensures vehicle utilization never exceeds 100%
+- **🆕 Refresh Traffic** — re-query congestion and re-generate route geometry on demand
 - **🆕 Traffic visualization** — color-coded route segments by congestion level
 - View routes on interactive map with actual road geometries
 - Track vehicle utilization, costs, and schedules
@@ -112,14 +115,16 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 - `POST /api/compute` - Trigger route optimization
 - `GET /api/results` - Retrieve optimized routes and statistics
 - `GET /api/download-report` - Download Excel report with delivery details
-- **🆕** `POST /api/refresh-traffic` - Re-query TomTom traffic, re-solve VRP, detect reroutes
+- **🆕** `POST /api/refresh-traffic` - Re-query traffic/weather, re-generate routes, detect reroutes
 
 #### Optimization Engine
-- **OR-Tools VRP Solver**: Capacity and time window constraints
+- **Google Route Optimization API** (Primary): OAuth2 Service Account, delivery-only capacity mode
+- **OR-Tools VRP Solver** (Fallback): Capacity and time window constraints
 - **pgRouting Integration**: Real-world distance matrix calculation
 - **Database Operations**: PostgreSQL/PostGIS for spatial data
 - **Route Geometry**: Per-segment MultiLineString geometries with traffic factors
-- **🆕 TomTom Traffic Service**: Real-time congestion data for delivery zones
+- **🆕 Multi-Source Traffic**: Google Routes API + TomTom + Weather Simulation
+- **🆕 Weather Simulation**: Deterministic monsoon simulation (~40% rain coverage)
 - **🆕 Realistic Time Modeling**: 10-min warehouse loading buffer + accurate travel time rounding
 
 ## 🛠️ Technology Stack
@@ -157,8 +162,10 @@ GisTransportation4/
 ├── backend/
 │   ├── main.py                 # FastAPI application
 │   ├── database.py             # PostgreSQL operations
-│   ├── vrp_solver.py           # OR-Tools VRP solver + traffic sync
-│   ├── traffic_service.py      # TomTom Traffic API client
+│   ├── vrp_solver.py           # VRP orchestration (Google + OR-Tools)
+│   ├── google_solver.py        # Google Route Optimization API (OAuth2)
+│   ├── traffic_service.py      # Multi-source traffic (Google/TomTom)
+│   ├── weather_service.py      # OpenWeatherMap + monsoon simulation
 │   ├── report_generator.py     # Excel report generation
 │   ├── requirements.txt        # Python dependencies
 │   ├── .env                    # Environment variables (not in git)
@@ -252,8 +259,19 @@ PORT=8000
 FRONTEND_URL=http://localhost:5173
 
 # API Keys
-TOMTOM_API_KEY=your_tomtom_api_key           # Live traffic data (https://developer.tomtom.com/)
+TOMTOM_API_KEY=your_tomtom_api_key           # Live traffic data (optional, https://developer.tomtom.com/)
 KRUTRIM_API_KEY=your_ola_maps_api_key        # Geocoding (Ola Maps)
+GOOGLE_MAPS_API_KEY=your_google_api_key      # Google Routes API traffic
+
+# Google Route Optimization (OAuth2 Service Account)
+USE_GOOGLE_OPTIMIZATION=true
+GOOGLE_PROJECT_ID=your-project-id
+GOOGLE_SERVICE_ACCOUNT_JSON=your-sa-file.json
+
+# Traffic & Weather
+TRAFFIC_SOURCE=google                         # 'google' or 'tomtom'
+WEATHER_SIMULATE_RAIN=true                    # Simulate monsoon at ~40% of stations
+OPENWEATHER_API_KEY=your_owm_key              # Real weather data
 ```
 
 ### Frontend Configuration
@@ -345,11 +363,12 @@ start.bat
 4. **Compute Routes**
    - Click "Compute Optimal Routes"
    - Backend performs:
-     - Data insertion to database
-     - Distance matrix calculation via pgRouting
-     - VRP optimization with OR-Tools
-     - Route geometry generation
-   - Processing time: 1-3 minutes for 50-100 deliveries
+      - Data insertion to database
+      - Distance matrix calculation via pgRouting
+      - Traffic + weather sync (Google/TomTom + simulation)
+      - VRP optimization with Google Route Optimization (or OR-Tools fallback)
+      - Route geometry generation with traffic colors
+   - Processing time: ~35-45 seconds for 56 deliveries
 
 5. **View Results**
    - **Map**: Color-coded routes with actual road paths
@@ -507,10 +526,13 @@ Deploy the `dist/` folder to:
 
 ##  Acknowledgments
 
-- **Google OR-Tools** for the VRP solver
+- **Google Route Optimization API** for industrial-grade VRP solving
+- **Google OR-Tools** for the VRP solver (fallback)
 - **pgRouting** for road network routing
 - **MapTiler** for map visualization
 - **OpenStreetMap** contributors for road data
-- **TomTom** for real-time traffic data API
+- **Google Routes API** for real-time traffic data
+- **TomTom** for real-time traffic data API (alternative)
+- **OpenWeatherMap** for weather data and monsoon simulation
 - **Ola Maps (Krutrim)** for geocoding API
 

@@ -44,9 +44,12 @@ async def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.07
     # --- PARALLEL TRAFFIC & WEATHER UPDATE ---
     tomtom_key = os.getenv("TOMTOM_API_KEY", "")
     owm_key = os.getenv("OPENWEATHER_API_KEY", "")
+    google_maps_key = os.getenv("GOOGLE_MAPS_API_KEY", "")
+    google_sa_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
     weather_alerts = []
     
-    if tomtom_key or owm_key:
+    # Run sync if ANY api source is available (traffic or weather)
+    if tomtom_key or owm_key or google_maps_key or google_sa_json:
         _t_sync = _time.perf_counter()
         print(f"🚦 Syncing live data for {len(stations)} stations...")
         reset_traffic_factors(conn)
@@ -54,17 +57,20 @@ async def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.07
         
         _t_api = _time.perf_counter()
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # 1. Prepare traffic tasks (limit to first 30 to stay safe with TomTom daily limits)
+            # 1. Prepare traffic tasks (limit to first 30 to avoid excessive API costs/limits)
             traffic_tasks = []
-            if tomtom_key:
+            
+            if tomtom_key or google_maps_key or google_sa_json:
                 for s in stations[:30]:
                     traffic_tasks.append(traffic_service.get_station_traffic_factor_async(
                         s['latitude'], s['longitude'], client
                     ))
             
-            # 2. Prepare weather tasks (OpenWeatherMap free tier: 60/min, so we can do all 56)
+            # 2. Prepare weather tasks
+            # Runs when OWM key is present (real data) OR simulation is enabled
             weather_tasks = []
-            if owm_key:
+            simulate_rain = os.getenv("WEATHER_SIMULATE_RAIN", "").lower() in ("true", "1", "yes")
+            if owm_key or simulate_rain:
                 for s in stations:
                     weather_tasks.append(weather_service.get_weather_async(
                         s['latitude'], s['longitude'], client
@@ -102,13 +108,115 @@ async def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.07
                 })
         
         # ONE single batch DB update instead of 86 individual calls
-        print(f"  📊 Applying {len(all_updates)} traffic/weather updates in 1 batch...")
+        traffic_updates = sum(1 for i, f in enumerate(traffic_results) if not isinstance(f, Exception) and f != 1.0)
+        weather_updates = len(all_updates) - traffic_updates
+        print(f"  📊 Applying {len(all_updates)} updates ({traffic_updates} traffic, {weather_updates} weather) in 1 batch...")
         batch_update_traffic_factors(conn, all_updates)
         conn.commit()
+        
+        # Verify updates were applied
+        cur_check = conn.cursor()
+        cur_check.execute("SELECT COUNT(*) FROM vector.road_maharashtra WHERE traffic_factor > 1.0")
+        affected_roads = cur_check.fetchone()[0]
+        cur_check.close()
+        print(f"  🔍 Roads with traffic_factor > 1.0: {affected_roads}")
+        
         print(f"  ⏱ DB apply: {_time.perf_counter() - _t_apply:.2f}s")
         print(f"✓ Parallel sync complete: {len(traffic_results)} traffic, {len(weather_results)} weather (total {_time.perf_counter() - _t_sync:.2f}s).")
     else:
         print("ℹ️ API keys missing — skipping live data sync.")
+    # ---------------------------
+
+    # --- GOOGLE OPTIMIZATION TOGGLE ---
+    use_google = os.getenv("USE_GOOGLE_OPTIMIZATION", "false").lower() in ("true", "1", "yes")
+    
+    if use_google:
+        from google_solver import solve_google_vrp
+        from database import get_fleet_vehicles
+        
+        print("\n🚀 Using GOOGLE ROUTE OPTIMIZATION...")
+        fleet = get_fleet_vehicles(conn)
+        
+        # We need to map stations to a list with lat/lon for the Google solver
+        google_stations = []
+        for s in stations:
+            google_stations.append({
+                "station_id": s["station_id"],
+                "latitude": s["latitude"],
+                "longitude": s["longitude"],
+                "parcel_weight": s["parcel_weight"],
+                "service_time": s["service_time"],
+                "window_start": s["window_start"],
+                "window_end": s["window_end"]
+            })
+            
+        google_result = await solve_google_vrp(
+            google_stations,
+            fleet,
+            warehouse_lon,
+            warehouse_lat
+        )
+        
+        if google_result.get("success"):
+            # Update result with weather/traffic info
+            google_result["weather_alerts"] = weather_alerts
+            google_result["weather_rerouted"] = len(weather_alerts) > 0
+            google_result["rerouted_vehicles"] = []
+            
+            # --- Post-processing: Generate route geometries for map display ---
+            from database import save_all_route_geometries
+            import time as _time
+            _t_geom = _time.perf_counter()
+            
+            # Build station_id -> node_id mapping (handle type: Google labels are strings)
+            station_to_node = {}
+            for s in stations:
+                station_to_node[str(s["station_id"])] = s["nearest_node_id"]
+            
+            depot_node = get_warehouse_node(conn, warehouse_lon, warehouse_lat)
+            
+            # Collect ALL route geometries for batch save
+            all_routes_data = []
+            cur = conn.cursor()
+            
+            # RESET all station assignments first (clear stale data from previous runs)
+            cur.execute("UPDATE vector.station_node_map SET vehicle_id = NULL, arrival_time = NULL, delivery_status = NULL")
+            
+            for route in google_result["routes"]:
+                route_nodes = [depot_node]
+                for stop in route["stops"]:
+                    sid = str(stop["station_id"])
+                    node_id = station_to_node.get(sid)
+                    if node_id:
+                        route_nodes.append(node_id)
+                    else:
+                        print(f"  ⚠️ No node found for station_id={sid}")
+                route_nodes.append(depot_node)
+                
+                all_routes_data.append({
+                    "vehicle_id": route["vehicle_id"],
+                    "route_nodes": route_nodes
+                })
+                
+                # Update station_node_map for visualization
+                for stop in route["stops"]:
+                    cur.execute("""
+                        UPDATE vector.station_node_map 
+                        SET vehicle_id = %s, arrival_time = %s, delivery_status = %s
+                        WHERE station_id = %s
+                    """, (route["vehicle_id"], stop["arrival_time"], stop["status"], stop["station_id"]))
+            
+            # Single batch call to save ALL route geometries (avoids TRUNCATE per route)
+            print(f"🛤️ Generating road geometries for {len(all_routes_data)} Google routes...")
+            save_all_route_geometries(conn, all_routes_data)
+            print(f"✓ Geometries generated (took {_time.perf_counter() - _t_geom:.2f}s)")
+            
+            conn.commit()
+            conn.close()
+            return google_result
+        else:
+            print(f"❌ Google Optimization failed: {google_result.get('error')}. Falling back to OR-Tools.")
+    
     # ---------------------------
 
 

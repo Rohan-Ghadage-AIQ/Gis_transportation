@@ -173,6 +173,7 @@ async def batch_geocode(addresses: List[str]) -> List[Dict]:
     import httpx
     from geocode_cache import get_cached_geocode, save_to_cache
     
+    use_krutrim = os.getenv("USE_KRUTRIM_GEOCODING", "true").lower() in ("true", "1", "yes")
     results_map = {}
     remaining_addresses = []
     
@@ -192,8 +193,11 @@ async def batch_geocode(addresses: List[str]) -> List[Dict]:
     
     async def geocode_task(addr, client):
         async with semaphore:
-            # Try Krutrim
-            res = await geocode_address_krutrim_async(addr, client)
+            res = None
+            if use_krutrim:
+                # Try Krutrim
+                res = await geocode_address_krutrim_async(addr, client)
+            
             if not res:
                 # Nominatim rate limit: 1/sec
                 await asyncio.sleep(1)

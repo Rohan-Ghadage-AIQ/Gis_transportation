@@ -382,13 +382,64 @@ if matrix_time > 30:  # Alert if > 30s
 
 ---
 
+## Multi-Solver & Traffic Architecture (Updated Feb 2026)
+
+### Problem
+Relying on a single optimization engine and traffic source limited comparison and accuracy verification.
+
+### Solution - Hybrid Integration
+The system now supports a toggleable architecture to switch between internal logic and external expert APIs.
+
+#### 1. Optimization Toggles
+- **Internal (OR-Tools)**: Fast, cost-effective, custom constraints. Used as fallback.
+- **External (Google Route Optimization)**: Fleet Routing API via OAuth2 Service Account for industrial-grade optimization.
+  - Uses **delivery-only** shipment mode (`loadDemands`) to enforce total weight ≤ vehicle capacity
+  - Prevents the pickup-delivery loophole where Google would allow over-capacity by distributing load across time
+
+**Toggle**: `USE_GOOGLE_OPTIMIZATION=true/false`
+**Auth**: `GOOGLE_SERVICE_ACCOUNT_JSON=<service-account-file>.json`
+
+#### 2. Traffic Source Toggles
+Real-time congestion data can be pulled from multiple providers:
+- **Google Routes API**: Compute Routes with `TRAFFIC_AWARE` preference. Uses OAuth2 Service Account. Compares `duration` vs `staticDuration`.
+- **TomTom**: Flow Segment Data API v4 (Point-based). Uses API key.
+
+**Toggle**: `TRAFFIC_SOURCE=google/tomtom`
+
+> **Note**: The Google Routes API requires explicit enablement in Google Cloud Console. If not enabled, traffic calls gracefully return 1.0 with a logged warning.
+
+#### 3. Weather Simulation
+When `WEATHER_SIMULATE_RAIN=true`, the system simulates monsoon conditions:
+- ~15% of stations get heavy rain (10× road penalty)
+- ~25% get moderate rain (3× road penalty)
+- ~60% stay clear (no penalty)
+- Deterministic: same station always gets same weather (seed from coordinates)
+- Updates ~24,000+ road segments via spatial batch join
+
+When `WEATHER_SIMULATE_RAIN=false`, real OpenWeatherMap API data is used.
+
+#### 4. Geocoding Toggles
+- **Ola Krutrim**: Primary geocoder for Indian addresses.
+- **Nominatim**: OpenStreetMap fallback.
+
+**Toggle**: `USE_KRUTRIM_GEOCODING=true/false`
+
+### Capacity Constraint Enforcement
+Google Route Optimization uses **delivery-only** mode (no `pickups` in shipments). This ensures:
+- `loadDemands.weight` represents the total weight loaded at the start
+- Total assigned weight per vehicle never exceeds `loadLimits.weight.maxLoad`
+- Utilization is always ≤ 100%
+
+Previously, with pickup+delivery mode, Google's `maxLoads` only tracked the max load at any point in time (load decreased as deliveries were made), allowing over-capacity in the total weight metric.
+
+### Strategic Impact
+This architecture allows the system to:
+- **Phase 1**: Solve using Google Route Optimization for best-in-class results, with weather-based traffic visualization
+- **Phase 2**: Enable Google Routes API for real-time traffic colors and OR-Tools comparison
+- **Fallback**: Always degrade gracefully — if Google APIs fail, OR-Tools and weather simulation provide full functionality
+
+---
+
 ## Conclusion
+Through systematic optimization of database queries, solver parameters, API integrations, and batch processing, the system achieves sub-40-second computation for 56 parcels across 10 vehicles while maintaining accuracy through real road distances, proper capacity constraints, and live traffic visualization.
 
-Through systematic optimization of database queries, algorithm parameters, and query batching, we achieved:
-
-- **79% reduction** in total computation time
-- **100% accuracy** maintained (real road distances)
-- **All parcels delivered** (increased fleet + penalties)
-- **Production-ready** performance (< 2 minutes)
-
-All optimizations follow the principle: **"Make it fast, but keep it accurate"** - no approximations or shortcuts that compromise the integrity of the vehicle routing solution.

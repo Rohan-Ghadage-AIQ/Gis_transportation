@@ -25,8 +25,8 @@ The Vehicle Routing Optimization System is a **three-tier architecture**:
 
 ```
 User uploads CSV → Frontend parses → Backend stores in DB → 
-pgRouting calculates distances → OR-Tools optimizes routes → 
-Backend fetches geometries → Frontend displays on map
+pgRouting calculates distances → Google Route Optimization / OR-Tools optimizes routes → 
+Weather + Traffic sync → Backend generates road geometries → Frontend displays on map
 ```
 
 ## 🗺️ Architecture Diagram
@@ -52,15 +52,15 @@ Backend fetches geometries → Frontend displays on map
 │  │   main.py    │  │ database.py  │  │vrp_solver.py │      │
 │  │              │  │              │  │              │      │
 │  │ - FastAPI    │  │ - PostgreSQL │  │ - OR-Tools   │      │
-│  │ - Endpoints  │  │ - PostGIS    │  │ - VRP Logic  │      │
+│  │ - Endpoints  │  │ - PostGIS    │  │ - Google VRP │      │
 │  │ - CORS       │  │ - pgRouting  │  │ - Constraints│      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
-│                    ┌──────────────┐                         │
-│                    │traffic_svc.py│                         │
-│                    │              │                         │
-│                    │ - TomTom API │                         │
-│                    │ - Congestion │                         │
-│                    └──────────────┘                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │google_solver │  │traffic_svc.py│  │weather_svc.py│      │
+│  │              │  │              │  │              │      │
+│  │ - OAuth2 SA  │  │ - Google API │  │ - OpenWeather│      │
+│  │ - Fleet API  │  │ - TomTom API │  │ - Monsoon Sim│      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
 │         │                  │                  │              │
 │         └──────────────────┴──────────────────┘              │
 │                            │                                 │
@@ -159,19 +159,19 @@ Backend fetches geometries → Frontend displays on map
                                │ Distance Matrix  │
                                │ (with live_cost) │
                                └──────────────────┘
-                                     │
-                                     ▼
-                               ┌──────────────────┐
-                               │ TomTom Traffic   │
-                               │ Sync congestion  │
-                               │ per delivery zone│
-                               └──────────────────┘
-                                     │
-                                     ▼
-                               ┌──────────────────┐
-                               │ vrp_solver.py    │
-                               │ OR-Tools VRP     │
-                               │ Optimization     │
+                                      │
+                                      ▼
+                                ┌──────────────────┐
+                                │ Traffic + Weather│
+                                │ Google Routes API│
+                                │ Weather Simulatn │
+                                └──────────────────┘
+                                      │
+                                      ▼
+                                ┌──────────────────┐
+                                │ vrp_solver.py    │
+                                │ Google Route Opt │
+                                │ (OR-Tools fback) │
                                └──────────────────┘
                                      │
                                      ▼
@@ -451,10 +451,11 @@ async def compute_routes():
     """
     1. Insert data to database
     2. Calculate distance matrix (with live_cost from traffic)
-    3. Sync TomTom traffic for delivery zones
-    4. Solve VRP
-    5. Generate per-segment route geometries with traffic factors
-    6. Return status
+    3. Sync Google/TomTom traffic + weather simulation for delivery zones
+    4. Solve VRP (Google Route Optimization or OR-Tools fallback)
+    5. Reset stale assignments, apply Google's vehicle-to-parcel mapping
+    6. Generate per-segment route geometries with traffic factors
+    7. Return status
     """
 
 @app.get("/api/results")
@@ -462,16 +463,16 @@ async def get_results():
     """
     1. Fetch vehicle assignments
     2. Fetch per-segment route geometries with traffic colors
-    3. Calculate statistics
-    4. Return complete results
+    3. Calculate statistics (distance, weight, utilization per vehicle)
+    4. Return complete results with weather alerts
     """
 
 @app.post("/api/refresh-traffic")
 async def refresh_traffic():
     """
-    1. Re-query TomTom for live traffic data
+    1. Re-query Google Routes API / weather simulation for live data
     2. Update road_maharashtra.traffic_factor + live_cost_s
-    3. Re-solve VRP with updated costs
+    3. Re-generate route geometries with updated traffic colors
     4. Detect rerouted vehicles
     5. Return updated results + reroute info
     """
@@ -536,7 +537,7 @@ def fetch_route_geometries_geojson(conn):
     """
 ```
 
-#### 3. vrp_solver.py (OR-Tools VRP)
+#### 3. vrp_solver.py (Multi-Solver VRP)
 
 **Optimization Process:**
 
@@ -548,18 +549,18 @@ def solve_vrp(conn):
     Steps:
     1. Fetch distance matrix from database
     2. Reset traffic factors to baseline
-    3. Query TomTom for live traffic per delivery zone
-    4. Update road costs: traffic_factor + live_cost_s
-    5. Create routing model
-    6. Add constraints:
-       - Vehicle capacity (118-348 kg)
-       - Time windows (7 AM - 9 PM)
-       - Service times (10 min per stop)
-       - Warehouse loading time (10 min)
-    7. Set objective: Minimize longest route
-    8. Solve with first solution strategy
-    9. Update database with assignments
-    10. Detect rerouted vehicles (vs previous solution)
+    3. Parallel sync: Google Routes API traffic + Weather simulation
+    4. Batch update road costs: traffic_factor + live_cost_s
+    5. If USE_GOOGLE_OPTIMIZATION=true:
+       a. Build Google Route Optimization request (OAuth2 Service Account)
+       b. Delivery-only mode (loadDemands enforces total weight ≤ capacity)
+       c. Parse response, map shipments to vehicles
+       d. Reset stale station assignments, apply Google's mapping
+    6. Else (OR-Tools fallback):
+       a. Create routing model with constraints
+       b. Vehicle capacity, time windows, service times
+       c. Solve with first solution strategy
+    7. Generate road geometries with avg_traffic_factor per segment
     """
 ```
 
@@ -1047,53 +1048,82 @@ useEffect(() => {
 
 ---
 
-### 3. Live Traffic Integration (TomTom)
+### 3. Live Traffic Integration (Multi-Source)
 
-**Feature**: Real-time traffic congestion data from TomTom adjusts road costs before VRP solving. Routes are optimized using live travel times, not just static map distances.
+**Feature**: Real-time traffic congestion data from multiple sources adjusts road costs before VRP solving. Routes are optimized using live travel times, not just static map distances.
 
-**Location**: Backend `traffic_service.py` + `vrp_solver.py` + `database.py`
+**Location**: Backend `traffic_service.py` + `weather_service.py` + `vrp_solver.py` + `database.py`
+
+**Traffic Data Sources**:
+
+| Source | Method | Authentication | Status |
+|--------|--------|----------------|--------|
+| Google Routes API | `duration / staticDuration` | OAuth2 Service Account | Requires API enablement |
+| TomTom Flow API | `freeFlowSpeed / currentSpeed` | API Key | Requires API key |
+| Weather Simulation | Monsoon penalty factors (3×–10×) | None (local) | Always available |
 
 **How It Works**:
 1. Before solving VRP, `reset_traffic_factors()` clears all road costs to baseline
-2. For each delivery zone, TomTom Flow Segment Data API v4 is queried
-3. The API returns `freeFlowSpeed` and `currentSpeed` → `factor = free / current`
-4. `update_road_traffic_factor()` updates `traffic_factor` and `live_cost_s` on nearby roads
-5. pgRouting uses `COALESCE(live_cost_s, cost_s)` — prefers traffic-adjusted cost
-6. The VRP solver uses these updated costs for route optimization
+2. **Traffic sync** (parallel):
+   - Google Routes API: Compares `duration` (with traffic) vs `staticDuration` (no traffic) via OAuth2
+   - Weather simulation: Deterministic monsoon simulation (~40% of stations get rain)
+3. `batch_update_traffic_factors()` applies all updates to nearby roads in a single spatial join
+4. pgRouting uses `COALESCE(live_cost_s, cost_s)` — prefers traffic-adjusted cost
+5. Route geometries store `avg_traffic_factor` per segment for color visualization
 
 **Traffic Factor Interpretation**:
 - `1.0` — Road is at free flow speed (no congestion)
-- `1.5` — Road is 50% slower than normal
-- `2.0` — Road is at half its normal speed (heavy traffic)
+- `1.5` — Road is 50% slower than normal (weather: moderate rain)
+- `3.0` — Heavy penalty (weather: moderate rainfall zone)
+- `10.0` — Severe penalty (weather: heavy rainfall / waterlogging risk)
 
 **API Configuration**:
 ```env
-TOMTOM_API_KEY=your_api_key  # in backend/.env
+# Traffic source toggle
+TRAFFIC_SOURCE=google              # 'google' or 'tomtom'
+GOOGLE_SERVICE_ACCOUNT_JSON=sa.json  # OAuth2 for Google Routes API
+TOMTOM_API_KEY=                      # Optional: TomTom API key
+
+# Weather simulation
+WEATHER_SIMULATE_RAIN=true           # Simulate monsoon at ~40% of stations
+OPENWEATHER_API_KEY=xxx              # Real weather data (when simulation is off)
 ```
 
 **Technical Implementation**:
 
-#### traffic_service.py
+#### traffic_service.py — Multi-Source Router
 ```python
-class TomTomTrafficService:
-    def get_traffic_factor(self, lat, lon) -> float:
-        """
-        Query TomTom Flow Segment Data API v4
-        Returns: freeFlowSpeed / currentSpeed (≥1.0)
-        Falls back to 1.0 on API error
-        """
+class GoogleTrafficService:
+    """Uses Google Routes API (Compute Routes) with OAuth2 Service Account"""
+    def get_traffic_factor_async(self, lat, lon, client) -> float:
+        """Compare duration vs staticDuration via OAuth2 Bearer token"""
 
-    def get_station_traffic_factor(self, station_lat, station_lon,
-                                    warehouse_lat, warehouse_lon) -> float:
-        """Get traffic factor for a station's delivery zone"""
+class TomTomTrafficService:
+    """Uses TomTom Flow Segment Data API v4 with API key"""
+    def get_traffic_factor_async(self, lat, lon, client) -> float:
+        """Query freeFlowSpeed / currentSpeed (≥1.0)"""
+
+class MultiSourceTrafficService:
+    """Routes requests to Google or TomTom based on TRAFFIC_SOURCE env"""
 ```
 
-#### database.py — Road Cost Updates
+#### weather_service.py — Monsoon Simulation
 ```python
-def update_road_traffic_factor(conn, lat, lon, factor, radius_km=2.0):
+class OpenWeatherService:
+    def _simulate_monsoon(self, lat, lon) -> dict:
+        """Deterministic rain simulation: ~15% heavy, ~25% moderate, ~60% clear"""
+    
+    def get_weather_async(self, lat, lon, client) -> dict:
+        """Returns penalty_factor (1.0, 3.0, or 10.0) based on rain severity"""
+```
+
+#### database.py — Batch Road Cost Updates
+```python
+def batch_update_traffic_factors(conn, updates: list):
     """
-    Update traffic_factor + live_cost_s for roads near a point.
-    live_cost_s = cost_s × factor
+    Single batch spatial join to update traffic_factor + live_cost_s
+    for all roads near given (lat, lon, factor, radius) tuples.
+    Replaces individual per-station calls (254x faster).
     """
 
 def reset_traffic_factors(conn):

@@ -42,7 +42,8 @@ class OpenWeatherService:
         ~40% of stations get rain, split between moderate and heavy.
         """
         # Deterministic randomness based on location — same station = same weather
-        seed = int(abs(lat * 10000 + lon * 10000)) % 100
+        # Use multiplication to spread the hash values better for nearby coordinates
+        seed = int(abs(lat * 10000) * abs(lon * 100)) % 100
         
         if seed < 15:
             # ~15% get heavy rain (waterlogging risk)
