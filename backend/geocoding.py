@@ -1,5 +1,5 @@
 """
-Geocoding module for converting addresses to coordinates using Ola Krutrim API
+Geocoding module for converting addresses to coordinates using Ola Maps API
 """
 
 import os
@@ -11,39 +11,52 @@ import time
 load_dotenv()
 
 KRUTRIM_API_KEY = os.getenv("KRUTRIM_API_KEY", "")
-KRUTRIM_API_URL = "https://api.olakrutrim.com/v1/geocode"
+# Ola Maps rebranded from olakrutrim.com → olamaps.io
+OLA_MAPS_GEOCODE_URL = "https://api.olamaps.io/places/v1/geocode"
 
-# Fallback to Nominatim (OpenStreetMap) if Krutrim fails
+# Fallback to Nominatim (OpenStreetMap) if Ola Maps fails
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
 
 async def geocode_address_krutrim_async(address: str, client: 'httpx.AsyncClient') -> Optional[Dict]:
-    """Async geocode using Ola Krutrim API."""
+    """Async geocode using Ola Maps API (formerly Krutrim)."""
     if not KRUTRIM_API_KEY:
         return None
     
     try:
-        response = await client.post(
-            KRUTRIM_API_URL,
-            headers={
-                "Authorization": f"Bearer {KRUTRIM_API_KEY}",
-                "Content-Type": "application/json"
+        response = await client.get(
+            OLA_MAPS_GEOCODE_URL,
+            params={
+                "address": address,
+                "language": "en",
+                "api_key": KRUTRIM_API_KEY
             },
-            json={"address": address, "region": "IN"},
+            headers={
+                "X-Request-Id": "vrp-geocode",
+                "Origin": "http://localhost:5173",
+                "Referer": "http://localhost:5173/"
+            },
             timeout=10
         )
         
         if response.status_code == 200:
             data = response.json()
-            if data.get("status") == "success" and data.get("results"):
-                result = data["results"][0]
-                return {
-                    "latitude": float(result["latitude"]),
-                    "longitude": float(result["longitude"]),
-                    "formatted_address": result.get("formatted_address", address),
-                    "confidence": float(result.get("confidence", 1.0)),
-                    "source": "krutrim"
-                }
+            results = data.get("geocodingResults", [])
+            if results:
+                result = results[0]
+                geo = result.get("geometry", {}).get("location", {})
+                lat = geo.get("lat")
+                lng = geo.get("lng")
+                if lat and lng:
+                    return {
+                        "latitude": float(lat),
+                        "longitude": float(lng),
+                        "formatted_address": result.get("formatted_address", address),
+                        "confidence": 1.0,
+                        "source": "krutrim"
+                    }
+        elif response.status_code in (401, 403):
+            print(f"⚠️  Ola Maps API auth failed ({response.status_code})")
     except Exception as e:
         print(f"Krutrim async error: {e}")
     return None
@@ -148,9 +161,32 @@ def geocode_address(address: str, use_cache: bool = True) -> Optional[Dict]:
             print(f"✓ Cache hit: {address[:50]}...")
             return cached
     
-    # Try Krutrim
-    print(f"→ Geocoding with Krutrim: {address[:50]}...")
-    result = geocode_address_krutrim(address)
+    result = None
+    # Try Ola Maps (Krutrim)
+    if KRUTRIM_API_KEY:
+        print(f"→ Geocoding with Ola Maps: {address[:50]}...")
+        try:
+            resp = requests.get(
+                OLA_MAPS_GEOCODE_URL,
+                params={"address": address, "language": "en", "api_key": KRUTRIM_API_KEY},
+                headers={"Origin": "http://localhost:5173", "Referer": "http://localhost:5173/"},
+                timeout=10
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                geo_results = data.get("geocodingResults", [])
+                if geo_results:
+                    geo = geo_results[0].get("geometry", {}).get("location", {})
+                    if geo.get("lat") and geo.get("lng"):
+                        result = {
+                            "latitude": float(geo["lat"]),
+                            "longitude": float(geo["lng"]),
+                            "formatted_address": geo_results[0].get("formatted_address", address),
+                            "confidence": 1.0,
+                            "source": "krutrim"
+                        }
+        except Exception as e:
+            print(f"Ola Maps sync error: {e}")
     
     # Fallback to Nominatim
     if not result:
@@ -184,37 +220,85 @@ async def batch_geocode(addresses: List[str]) -> List[Dict]:
             results_map[addr] = cached
         else:
             remaining_addresses.append(addr)
+    
+    cached_count = len(addresses) - len(remaining_addresses)
+    if cached_count > 0:
+        print(f"✓ {cached_count} addresses found in cache")
             
     if not remaining_addresses:
+        print("✓ All addresses found in cache!")
         return [results_map[addr] for addr in addresses]
-        
-    # 2. Parallel Geocode remaining
-    semaphore = asyncio.Semaphore(2) # Limit concurrency to avoid blocking/rate limits
     
-    async def geocode_task(addr, client):
-        async with semaphore:
-            res = None
-            if use_krutrim:
-                # Try Krutrim
-                res = await geocode_address_krutrim_async(addr, client)
-            
-            if not res:
-                # Nominatim rate limit: 1/sec
-                await asyncio.sleep(1)
+    print(f"→ Geocoding {len(remaining_addresses)} addresses...")
+    
+    # 2. Track if Krutrim is reachable (skip after first DNS failure)
+    krutrim_reachable = use_krutrim
+    
+    # Nominatim must be serialized (1 request per second rate limit)
+    nominatim_lock = asyncio.Lock()
+    
+    async def geocode_single(addr: str, client: httpx.AsyncClient) -> tuple:
+        nonlocal krutrim_reachable
+        res = None
+        
+        # Try Krutrim (skip if already known to be down)
+        if krutrim_reachable:
+            res = await geocode_address_krutrim_async(addr, client)
+            if res is None and not krutrim_reachable:
+                pass  # Already flagged by another task
+        
+        # Fallback to Nominatim (serialized with lock)
+        if not res:
+            async with nominatim_lock:
+                await asyncio.sleep(1.1)  # Nominatim rate limit: 1 req/sec
                 res = await geocode_address_nominatim_async(addr, client)
-            
-            if res:
-                save_to_cache(addr, res)
-                return addr, res
-            return addr, {"latitude": None, "longitude": None, "formatted_address": addr, "confidence": 0.0, "source": "none", "error": "Failed"}
+        
+        if res:
+            save_to_cache(addr, res)
+            return addr, res
+        return addr, {"latitude": None, "longitude": None, "formatted_address": addr, "confidence": 0.0, "source": "none", "error": "Failed"}
 
+    # 3. First, test if Krutrim is reachable with a single request
     async with httpx.AsyncClient() as client:
-        tasks = [geocode_task(addr, client) for addr in remaining_addresses]
-        done = await asyncio.gather(*tasks)
-        for addr, res in done:
-            results_map[addr] = res
+        if use_krutrim and remaining_addresses:
+            test_result = await geocode_address_krutrim_async(remaining_addresses[0], client)
+            if test_result:
+                results_map[remaining_addresses[0]] = test_result
+                save_to_cache(remaining_addresses[0], test_result)
+                remaining_addresses = remaining_addresses[1:]
+                krutrim_reachable = True
+                print("✓ Krutrim API is reachable — using fast parallel geocoding")
+            else:
+                krutrim_reachable = False
+                print("⚠️  Krutrim API unreachable — falling back to Nominatim (slower, ~1 addr/sec)")
+        
+        # 4. Process remaining addresses
+        if remaining_addresses:
+            if krutrim_reachable:
+                # Krutrim works — geocode in parallel batches of 5
+                sem = asyncio.Semaphore(5)
+                async def krutrim_task(addr):
+                    async with sem:
+                        return await geocode_single(addr, client)
+                tasks = [krutrim_task(addr) for addr in remaining_addresses]
+                done = await asyncio.gather(*tasks)
+            else:
+                # Krutrim is down — run Nominatim sequentially (it handles its own lock)
+                done = []
+                for i, addr in enumerate(remaining_addresses):
+                    result = await geocode_single(addr, client)
+                    done.append(result)
+                    if (i + 1) % 10 == 0:
+                        print(f"  Geocoded {i + 1}/{len(remaining_addresses)}...")
+            
+            for addr, res in done:
+                results_map[addr] = res
+    
+    success = sum(1 for r in results_map.values() if r.get("latitude") is not None)
+    print(f"\n✓ Successfully geocoded {success}/{len(addresses)} addresses!")
             
     return [results_map[addr] for addr in addresses]
+
 
 
 def validate_coordinates(lat: float, lon: float) -> bool:

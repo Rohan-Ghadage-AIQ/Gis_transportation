@@ -896,31 +896,48 @@ async def upload_file(file: UploadFile):
 
 ### Overview
 
-The system includes automatic geocoding to convert addresses to coordinates using Ola Maps API (primary) with Nominatim (OpenStreetMap) as fallback.
+The system includes automatic geocoding to convert addresses to coordinates using **Ola Maps API** (primary, `api.olamaps.io`) with **Nominatim** (OpenStreetMap) as fallback.
 
 ### Geocoding Workflow
 
 ```
 CSV with addresses → Backend detects 'address' column → 
-Ola Maps API calls (with Nominatim fallback) → Coordinates added → Data stored with metadata
+Check geocode cache → Ola Maps API (parallel, 5 concurrent) →
+Nominatim fallback (serialized, 1 req/sec) → Coordinates added → Cache results
 ```
 
 ### Implementation Details
 
-**File**: `backend/main.py`
+**File**: `backend/geocoding.py`
 
 ```python
-def geocode_addresses(df):
-    """Geocode addresses using Nominatim"""
-    for idx, row in df.iterrows():
-        if pd.isna(row.get('latitude')) or pd.isna(row.get('longitude')):
-            address = row.get('address', '')
-            # Call Nominatim API
-            coords = geocode_address(address)
-            df.at[idx, 'latitude'] = coords['lat']
-            df.at[idx, 'longitude'] = coords['lon']
-            df.at[idx, 'geocode_confidence'] = coords['confidence']
-    return df
+# Ola Maps API (rebranded from olakrutrim.com → olamaps.io)
+OLA_MAPS_GEOCODE_URL = "https://api.olamaps.io/places/v1/geocode"
+
+async def geocode_address_krutrim_async(address, client):
+    """GET request with api_key param + Origin header (domain whitelisting)"""
+    response = await client.get(
+        OLA_MAPS_GEOCODE_URL,
+        params={"address": address, "language": "en", "api_key": KRUTRIM_API_KEY},
+        headers={"Origin": "http://localhost:5173"}  # Required for domain whitelisting
+    )
+    # Response: geocodingResults[].geometry.location.{lat, lng}
+
+async def batch_geocode(addresses):
+    """
+    1. Check cache (geocode_cache.py)
+    2. Test Krutrim with first address — skip if unreachable
+    3. If Krutrim OK: parallel geocode (5 concurrent)
+    4. If Krutrim down: serialize via Nominatim (1 req/sec with asyncio.Lock)
+    5. Cache all successful results
+    """
+```
+
+### API Configuration
+
+```env
+KRUTRIM_API_KEY=your_ola_maps_api_key    # From maps.olakrutrim.com
+USE_KRUTRIM_GEOCODING=true                # Set false to use Nominatim only
 ```
 
 ### Geocoding Metadata
@@ -928,7 +945,8 @@ def geocode_addresses(df):
 The system stores additional geocoding information:
 - `formatted_address`: Standardized address from geocoder
 - `geocode_confidence`: Confidence score (0-1)
-- `geocode_source`: Source of geocoding (e.g., "nominatim")
+- `geocode_source`: Source of geocoding (`"krutrim"` or `"nominatim"`)
+
 
 ## 📊 Excel Report Generation
 

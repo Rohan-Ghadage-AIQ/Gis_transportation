@@ -260,7 +260,8 @@ FRONTEND_URL=http://localhost:5173
 
 # API Keys
 TOMTOM_API_KEY=your_tomtom_api_key           # Live traffic data (optional, https://developer.tomtom.com/)
-KRUTRIM_API_KEY=your_ola_maps_api_key        # Geocoding (Ola Maps)
+KRUTRIM_API_KEY=your_ola_maps_api_key        # Geocoding (Ola Maps — api.olamaps.io)
+USE_KRUTRIM_GEOCODING=true                   # Set false to use Nominatim only
 GOOGLE_MAPS_API_KEY=your_google_api_key      # Google Routes API traffic
 
 # Google Route Optimization (OAuth2 Service Account)

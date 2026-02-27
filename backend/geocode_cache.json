@@ -397,5 +397,355 @@
     "formatted_address": "Veer Savarkar Marg, Ambivali, Kalyan-Dombivli, Kalyan Taluka, Thane, Maharashtra, 410209, India",
     "confidence": 0.053383719386587286,
     "source": "nominatim"
+  },
+  "7e2fdf45b0c581889167ef52f7dcddd9": {
+    "latitude": 19.0568534,
+    "longitude": 72.8241547,
+    "formatted_address": "Chimbai Road, Chimbai Village, Khar, H/W Ward, Mumbai Zone 3, Mumbai, Mumbai Suburban District, Maharashtra, 400050, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "7983fcafd159636b7d13dec397da3414": {
+    "latitude": 18.9716185,
+    "longitude": 72.8065104,
+    "formatted_address": "Sophia College Lane, Breach Candy, Cumballa Hill, D Ward, Mumbai Zone 1, Mumbai City District, Maharashtra, 400026, India",
+    "confidence": 0.05340932860303651,
+    "source": "nominatim"
+  },
+  "efd88ceb70151caac86cc843c39b0a85": {
+    "latitude": 19.30151,
+    "longitude": 72.84791,
+    "formatted_address": "Pay And Use Toilet, Wing-D Station Rd Chandulal Park Bhayandar West Mira Bhayandar Maharashtra, Wing-D, Station Rd, Bhayandar, Chandulal Park, Bhayandar West, Mira Bhayandar, Maharashtra, 401101, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "53d267ada4bade645ecaeb04a605d2f6": {
+    "latitude": 19.2996,
+    "longitude": 72.8491,
+    "formatted_address": "Dr Keshav Baliram Hedgewar Rd, Bhayandar, Chandmal Nagar, Bhayandar West, Mira Bhayandar, Maharashtra, 401101, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "bf0283687123ef65a21455d1dd7710e4": {
+    "latitude": 19.2959,
+    "longitude": 72.8595,
+    "formatted_address": "Sur Pancham Music & Hobby Academy, Silent Park, Golden Nest Circle, Old Golden Nest, Phase 9, Phase 2, Bhayandar East, Mira Bhayandar, Maharashtra, 401104, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "a5b015a043284eba3c1e0a5974911623": {
+    "latitude": 19.2926,
+    "longitude": 72.8775,
+    "formatted_address": "Kanakia Township, Gaurav City, Mira Road East, Mira Bhayandar, Maharashtra, 401104, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "7c7224dac8cc2025703188caf18d34b0": {
+    "latitude": 19.29229,
+    "longitude": 72.86391,
+    "formatted_address": "Property Hub Developers, Shop No. 11, Poonam Orbit, Behind Deepak Hospital, Mira Road East, Queen's Park Road, Medetiya Nagar, Queen's Park, Medetiya Nagar, Queens Park, Mira Road, Mira Bhayandar, Maharashtra, 401104, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "80016e8b72bf149e6b657ab549e1f3d7": {
+    "latitude": 19.301,
+    "longitude": 72.8571,
+    "formatted_address": "Canllum Export, Gala No 8 Kasturi Industrial Estate, Fatak Rd, Bhayandar, Sonam Sagar, Indira Nagar, Bhayandar East, Mira Bhayandar, Maharashtra, 401105, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "f7b554f1b4f8bd44fa1568342505f3ec": {
+    "latitude": 19.25713,
+    "longitude": 72.86357,
+    "formatted_address": "A-Wing, Blue Bell Society, Avdhut Nagar, Dahisar East, Mumbai, Maharashtra, 400068, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "784d88a6cc46c25b9ebe7bfe7124ab0e": {
+    "latitude": 19.2735,
+    "longitude": 72.8709,
+    "formatted_address": "At Moon Ventures Private Limited, 8/102, Shanti Gardens Rd, Gaurav Galaxy, Mira Road, Maharashtra, 401104, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "8a42c2a99f5f022627aa8d6bb95ce26f": {
+    "latitude": 19.2964,
+    "longitude": 72.8557,
+    "formatted_address": "Dolphin Instruments, Ravi Raj Industries, Gala No. 33, Behind Dharam Kanta, Near Janseva Shakari Bank, Phatak Road, Bhayander East, Bhayandar, Qamar Park, Bhayandar East, Thane, Maharashtra, 401105, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "a74796a52971991fec295452797e5a4e": {
+    "latitude": 19.2727,
+    "longitude": 72.8639,
+    "formatted_address": "Su Swagat Restaurant And Banquets, Between, Asmita Garden, 1 And 2, Opposite Sector 9, Poonam Sagar Complex, Mira Road East, Thane, Mira Bhayandar, Maharashtra, 401104, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "8809eec0ad810c032aea1670f86d35b8": {
+    "latitude": 19.279,
+    "longitude": 72.8752,
+    "formatted_address": "Nitika Banquet, Below Wilfred School, Near TVS Showroom, Sanghvi Nagar, Pleasant Park, Mira Road East, Mumbai, Mira Bhayandar, Maharashtra 401104, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "a617d44ed6309417fd960d2329602cde": {
+    "latitude": 19.2485,
+    "longitude": 72.8567,
+    "formatted_address": "Santoshi Mata Rd, Jai Yogeshwari, Mandapeshwar, Dahisar West, Mumbai, Maharashtra, 400103, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "8f9b747d1a4a6c1efb8251b47a4d3b7f": {
+    "latitude": 19.2537,
+    "longitude": 72.8574,
+    "formatted_address": "Aishwarya Enclave, Mhatre Wadi, Dahisar West, Mhatre Wadi, Dahisar West, Mumbai, Maharashtra, 400068, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "04e389ac41579a22834031dcdd86e30a": {
+    "latitude": 19.2314,
+    "longitude": 72.8361,
+    "formatted_address": "New Rationing Card Offie, Mhada Bldg, 2-A, Gorai 3, Borivali West, Mumbai, Maharashtra, 400092, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "6785249f49fb279b7facc1fc32af69fa": {
+    "latitude": 19.2416,
+    "longitude": 72.851,
+    "formatted_address": "Aarti Clinic, Vidyut Rekha Co-Operative Housing Society, A6-18, LIC Rd Number 2, Aary Colony, LIC Colony, Borivali West, Mumbai, Maharashtra 400092, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "ab7b56253f2b67ccefebd7fc50589a9d": {
+    "latitude": 19.23,
+    "longitude": 72.8237,
+    "formatted_address": "Shiva Sagar CHSL, 2, Gorai Rd, Sangam Society, Samabhav Society, Gorai 2, Borivali West, Mumbai, Maharashtra, 400091, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "66d91ad97f93af859bbf7452f1145d2f": {
+    "latitude": 19.2546,
+    "longitude": 72.8595,
+    "formatted_address": "A Wing, Misquitta Nagar, A2, Hari Shankar Joshi Rd, Krishna Colony, Dahisar East, Mumbai, Maharashtra, 400068, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "c524699cd494bed4fa7753cd3e929fdc": {
+    "latitude": 19.1338,
+    "longitude": 72.8109,
+    "formatted_address": "Silver View Apartment, S, 35, JP Rd, Jeet Nagar, Versova, Andheri West, Mumbai, Maharashtra, 400061, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "a465ed1091d1cdebfabf5395a9a34f09": {
+    "latitude": 19.137,
+    "longitude": 72.8108,
+    "formatted_address": "Bank Of India, Wing C, Yari Rd, Achal Avichal Chanchal, Versova, Andheri West, Achal Avichal Chanchal, Versova, Andheri West, Mumbai, Maharashtra, 400061, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "4e9501d3ee02ab56a535ad063bb15ecf": {
+    "latitude": 19.1759,
+    "longitude": 72.8104,
+    "formatted_address": "Kai.Sushant Mitra Mandal, Ambojwadi, Malad West, Malad, Ambojwadi, Malad West, Mumbai, Maharashtra, 400095, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "812ce90126a21f0f1d3befd9c0d009c0": {
+    "latitude": 19.1831,
+    "longitude": 72.8189,
+    "formatted_address": "Cafe Ajwa : Chinese, Mughlai & Indian Food Restaurant In Malwani Mhada, 52, Gate Number 8, 409, Mhada Rd, Opposite Bus Depot, Malad, Gaikwad Nagar, Malvani, Malad West, Mumbai, Maharashtra, 400095, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "9d8dcb19f0d2d5a0006ba60ca5c4f8f7": {
+    "latitude": 19.1281,
+    "longitude": 72.8273,
+    "formatted_address": "Building No 22, 4, Manish Nagar Rd, Gharkul Society, Manish Nagar, Four Bungalows, Andheri West, Mumbai, Maharashtra, 400053, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "b1ea741385abcab77ae128f6ea34a3f7": {
+    "latitude": 19.0995,
+    "longitude": 72.8435,
+    "formatted_address": "25, Church Rd, Near BJYM Vile Parle, LIC Colony, Suresh Colony, Vile Parle West, Mumbai, Maharashtra, 400056, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "47a8cb93d68fab38bd1df91fd3ccf03e": {
+    "latitude": 19.1127,
+    "longitude": 72.8446,
+    "formatted_address": "35, Lallubhai Park Rd, Navpada, T E Colony, Andheri West, Mumbai, Maharashtra 58, 400058, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "3c9415820e96c1623df49fe566a02086": {
+    "latitude": 19.0811,
+    "longitude": 72.8291,
+    "formatted_address": "Anand Laundry Service, Shop No.4, Fholwadi CHL, Gazdhar Bandh Rd, Govind Nagar, Santacruz West, Mumbai, Maharashtra, 400049, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "8e98ff685734dc81f60df283488f1b91": {
+    "latitude": 19.2106,
+    "longitude": 72.8168,
+    "formatted_address": "Laxmi Die Works, Gala No 23, 24 & 25 Sai Compound CTS No 149, Survey No 29 Hissa No 13 Laxmi Nagar Charkop Village, Kandivali, Charkop, Charkop Gaon, Kandivali West, Mumbai, Maharashtra, 400067, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "ad5220f9fc1e1d1e3728904e3e7f1b51": {
+    "latitude": 19.075,
+    "longitude": 72.8227,
+    "formatted_address": "Danda Co. Operative Credit Society, Ram Mandir Marg, Opposite ShivSena Shakha, Pyari Nagar, Khar Road West, Danda Village, Khar Danda, Mumbai, Maharashtra, 400049, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "a022d4b465fa73f76718b8bbfc0c3298": {
+    "latitude": 19.065,
+    "longitude": 72.825,
+    "formatted_address": "Shadaab Tower, Sherly Rajan Rd, Rizvi Complex, Shirley, Bandra West, Mumbai, Maharashtra, 400050, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "408e68436edfda4301f61ae5c7fae7d1": {
+    "latitude": 19.0618,
+    "longitude": 72.8227,
+    "formatted_address": "The Jackers, 113, Sangeet Samrat Naushad Ali Rd, Bandra West, Mumbai, Maharashtra, 400050, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "74ba7cce35ce07c4f2af718f9f5cc1b2": {
+    "latitude": 18.9728,
+    "longitude": 72.809,
+    "formatted_address": "Everest Building, Dr Gopalrao Deshmukh Marg, Opp. 12, IT Colony, Cumballa Hill, Mumbai, Maharashtra 400026, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "44716c713681ac9f42fe314667cf0f30": {
+    "latitude": 18.9516,
+    "longitude": 72.7962,
+    "formatted_address": "89, Nepean Sea Rd, Navshanti Nagar, Malabar Hill, Mumbai, Maharashtra, 400006, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "c5c3e0122d335879ec434071bf0062ab": {
+    "latitude": 19.0059,
+    "longitude": 72.8143,
+    "formatted_address": "81, Khan Abdul Gaffar Khan Road, Police Camp, Worli Sea Face, Worli, Mumbai, Maharashtra, 400030, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "d0f8907a455d16aad3ae78e39698d568": {
+    "latitude": 19.0445,
+    "longitude": 72.82,
+    "formatted_address": "FR Agnel Ashram, Agnel Technical Education, Bandstand Promenade, Mount Mary, Bandra West, W, Maharashtra, 400050, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "902217b70a4a1a49b16f8dd96d2761c3": {
+    "latitude": 18.922,
+    "longitude": 72.8344,
+    "formatted_address": "Gupta Photography, Shop No 1, Gateway Of 400001, India, Apollo Bandar, Colaba, Mumbai, Maharashtra",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "4b67a875927e274c78a3097bf99a4f23": {
+    "latitude": 19.0209,
+    "longitude": 72.8477,
+    "formatted_address": "Kesar Polaris, 126, 5th LN, Hindu Colony, Dadar, Mumbai, Maharashtra, 400014, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "42a55842debf0a9dd15531c9715d75f8": {
+    "latitude": 19.0287,
+    "longitude": 72.8542,
+    "formatted_address": "Happy Home, 380, Telang Cross Rd Number 3, Brhmanwada, Matunga East, Mumbai, Maharashtra, 400019, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "b2cdb5355875bda4d84cae34d38d99d7": {
+    "latitude": 18.9351,
+    "longitude": 72.8242,
+    "formatted_address": "Prabhat Building, Churchgate, 41, B Rd, Churchgate, Mumbai, Maharashtra, 400020, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "8cee10af3ddc346912fd96994a3cc4a9": {
+    "latitude": 18.9971,
+    "longitude": 72.8143,
+    "formatted_address": "Dhun Apartments, 66, Worli Hill Rd, Siddharth Nagar, Worli, Mumbai, Maharashtra, 400018, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "ffb5dd89ff36b2beeb02841deb07ad75": {
+    "latitude": 19.01792,
+    "longitude": 72.84503,
+    "formatted_address": "32, Tilak Marg Number, 2, Lokmanya Tilak Colony, Dadar, Mumbai, Maharashtra, 400014, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "fbca4faa0003ef3f86edd36d8d7b217f": {
+    "latitude": 19.0091,
+    "longitude": 72.8252,
+    "formatted_address": "2c, Century Mill Mhada Sankul, Century Mill Mhada Building Wing-1b, Century Mill Mhada Building, Century Mills, Lower Parel, Mumbai, Maharashtra, 400025, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "650886153a26382c6adbefdbafce1ff6": {
+    "latitude": 19.0142,
+    "longitude": 72.8373,
+    "formatted_address": "Itone (India) Pvt. Ltd, Itone (400028, India) Pvt. Ltd, 312 Jogani Industrial Estate, Senapati Bapat Marg, Dadar (west), Babasaheb Ambedkar Nagar, Mumbai, Maharashtra",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "8170ee0da4bff78758c781bf15b0f61b": {
+    "latitude": 18.9884,
+    "longitude": 72.8118,
+    "formatted_address": "Samudra Mahal, Shiv Sagar Estate, Worli, Mumbai, Maharashtra, 400018, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "378f84513dbd0c55514c091c4f28399a": {
+    "latitude": 18.9674,
+    "longitude": 72.8377,
+    "formatted_address": "Bit Chawl 5, B.I.T. Chawl No. 5, 5, Tadwadi, Mazgaon, Mumbai, Maharashtra 400008, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "76e139779aef25b6c22db49783ed7898": {
+    "latitude": 19.0043,
+    "longitude": 72.8176,
+    "formatted_address": "Ocean House, Sudam Kalu Ahire Marg, B Wing, BDD Chawls Worli, Worli, Mumbai, Maharashtra, 400018, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "2c09b17b4d0f9aa71325b8d4fa9e6e2e": {
+    "latitude": 18.9741,
+    "longitude": 72.8332,
+    "formatted_address": "Byculla Bhaji Market, Marzban Mansion, NUB Marg, Byculla West, Chinchpokli, Mumbai, Maharashtra, 400027, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "757e43c84faf413880ba220baa9d8254": {
+    "latitude": 18.9858,
+    "longitude": 72.8347,
+    "formatted_address": "Vrindavan Housing Building2, Dr.Ambedkar Road, Bhai Bal Mukund Marg, Byculla, Mumbai, Maharashtra, 400012, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "b080e33209656a1f04080722a94a5241": {
+    "latitude": 18.9498,
+    "longitude": 72.7948,
+    "formatted_address": "Shripal Nagar, Shripal Nagar Society Raja Hareepal, Harkness Rd, Navshanti Nagar, Malabar Hill, Mumbai, Maharashtra, 400006, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "2dbc66d7a33aacdaf303f0139bb3dfe7": {
+    "latitude": 18.9491,
+    "longitude": 72.8337,
+    "formatted_address": "89, Sarang St, Near Crawford Market, Lohar Chawl, Kalbadevi, Mumbai, Maharashtra, 400003, India",
+    "confidence": 1.0,
+    "source": "krutrim"
   }
 }
