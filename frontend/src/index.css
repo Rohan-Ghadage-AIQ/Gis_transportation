@@ -313,3 +313,93 @@ body {
     transform: translateY(0) scale(1);
   }
 }
+
+/* ══════════════════════════════════════════════
+   Chatbot Animations
+   ══════════════════════════════════════════════ */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Typing dots */
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a78bfa;
+  animation: typingBounce 1.2s ease-in-out infinite;
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+/* Chatbot panel scrollbar */
+.chatbot-panel ::-webkit-scrollbar {
+  width: 5px;
+}
+
+.chatbot-panel ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chatbot-panel ::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 3px;
+}
+
+.chatbot-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.5);
+}
+
+/* Gemini button glow */
+.gemini-btn {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.gemini-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.5);
+}
+
+.gemini-btn::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #7c3aed, #a78bfa, #c084fc);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.gemini-btn:hover::after {
+  opacity: 0.6;
+}

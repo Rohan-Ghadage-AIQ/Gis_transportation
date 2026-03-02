@@ -30,6 +30,7 @@ from database import (
 from vrp_solver import solve_vrp
 from geocoding import batch_geocode
 from weather_service import weather_service
+from chatbot_service import chat as chatbot_chat, build_data_context
 
 load_dotenv()
 
@@ -904,6 +905,40 @@ async def get_weather():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== CHATBOT =====
+
+# Store uploaded data summary for chatbot context
+UPLOADED_DATA_SUMMARY = {}
+
+class ChatRequest(BaseModel):
+    message: str
+    history: Optional[List[Dict[str, str]]] = None
+
+@app.post("/api/chat")
+async def chat_endpoint(req: ChatRequest):
+    """Chat with Gemini AI about the current delivery plan data."""
+    try:
+        # Get current results for context
+        conn = get_db_connection()
+        try:
+            results_data = get_all_results_data(conn)
+        finally:
+            conn.close()
+        
+        # Send to Gemini with data context
+        response = await chatbot_chat(
+            message=req.message,
+            results_data=results_data,
+            history=req.history,
+            uploaded_data_summary=UPLOADED_DATA_SUMMARY
+        )
+        
+        return {"response": response}
+    except Exception as e:
+        print(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

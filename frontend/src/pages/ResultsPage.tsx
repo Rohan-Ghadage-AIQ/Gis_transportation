@@ -3,7 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { MapView } from '../components/MapView';
 import { StatsPanel } from '../components/StatsPanel';
+import { ChatWidget } from '../components/ChatWidget';
 import type { RouteResults } from '../types/api';
+
+// Gemini sparkle icon
+const GeminiIcon = ({ size = 16 }: { size?: number }) => (
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
+        <path d="M14 0C14 7.732 7.732 14 0 14C7.732 14 14 20.268 14 28C14 20.268 20.268 14 28 14C20.268 14 14 7.732 14 0Z" fill="currentColor" />
+    </svg>
+);
 
 export const ResultsPage: React.FC = () => {
     const navigate = useNavigate();
@@ -12,6 +20,7 @@ export const ResultsPage: React.FC = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string>('');
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'warning' } | null>(null);
+    const [chatOpen, setChatOpen] = useState(false);
 
     useEffect(() => {
         const fetchResults = async () => {
@@ -136,6 +145,32 @@ export const ResultsPage: React.FC = () => {
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
+                    {/* Gemini AI Chatbot Button */}
+                    <button
+                        onClick={() => setChatOpen(!chatOpen)}
+                        className="gemini-btn"
+                        style={{
+                            background: chatOpen
+                                ? 'linear-gradient(135deg, #6d28d9, #5b21b6)'
+                                : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 8,
+                            padding: '8px 16px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            fontSize: 13,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 7,
+                            boxShadow: chatOpen
+                                ? '0 0 16px rgba(124, 58, 237, 0.5), inset 0 1px 1px rgba(255,255,255,0.1)'
+                                : '0 2px 8px rgba(124, 58, 237, 0.3)',
+                        }}
+                    >
+                        <GeminiIcon size={14} />
+                        AI Assistant
+                    </button>
                     <button
                         onClick={handleRefreshTraffic}
                         disabled={isRefreshing}
@@ -192,7 +227,7 @@ export const ResultsPage: React.FC = () => {
             </div>
 
             {/* Main Content - Split View */}
-            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
                 {/* Left Panel - Statistics */}
                 <div style={{
                     width: '33%', overflow: 'hidden',
@@ -201,10 +236,17 @@ export const ResultsPage: React.FC = () => {
                     <StatsPanel results={results} />
                 </div>
 
-                {/* Right Panel - Map */}
+                {/* Center Panel - Map */}
                 <div style={{ flex: 1 }}>
                     <MapView results={results} />
                 </div>
+
+                {/* Right Panel - Chat (slides in from right) */}
+                <ChatWidget
+                    results={results}
+                    isOpen={chatOpen}
+                    onClose={() => setChatOpen(false)}
+                />
             </div>
         </div>
     );

@@ -54,6 +54,7 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 - **🆕 Delivery-only capacity** — ensures vehicle utilization never exceeds 100%
 - **🆕 Refresh Traffic** — re-query congestion and re-generate route geometry on demand
 - **🆕 Traffic visualization** — color-coded route segments by congestion level
+- **🆕 AI Chatbot** — Gemini-powered analytics assistant on Results page (ask about routes, vehicles, parcels, weather)
 - View routes on interactive map with actual road geometries
 - Track vehicle utilization, costs, and schedules
 - Download formatted Excel reports with delivery details
@@ -273,6 +274,9 @@ GOOGLE_SERVICE_ACCOUNT_JSON=your-sa-file.json
 TRAFFIC_SOURCE=google                         # 'google' or 'tomtom'
 WEATHER_SIMULATE_RAIN=true                    # Simulate monsoon at ~40% of stations
 OPENWEATHER_API_KEY=your_owm_key              # Real weather data
+
+# AI Chatbot
+GEMINI_API_KEY=your_gemini_api_key            # From https://aistudio.google.com/
 ```
 
 ### Frontend Configuration

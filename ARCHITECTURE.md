@@ -948,6 +948,63 @@ The system stores additional geocoding information:
 - `geocode_source`: Source of geocoding (`"krutrim"` or `"nominatim"`)
 
 
+## 🤖 Gemini AI Chatbot
+
+### Overview
+
+The Results page includes an AI-powered analytics chatbot that answers questions **only from the system's delivery data**. It uses **Google Gemini 2.5 Flash** via the `google.genai` SDK.
+
+### Architecture
+
+```
+ResultsPage (ChatWidget.tsx)
+  │  User types question
+  │  POST /api/chat { message, history[] }
+  ▼
+main.py → /api/chat endpoint
+  │  Fetches current results from DB (get_all_results_data)
+  ▼
+chatbot_service.py
+  │  1. build_data_context() — converts results into structured text:
+  │     • Delivery plan summary (vehicles, distance, cost)
+  │     • Per-vehicle table (distance, weight, utilization, stops, shift)
+  │     • Delivery status per vehicle (ON_TIME, LATE, IN_BUFFER)
+  │     • Undelivered parcels with coordinates
+  │     • Weather alerts (heavy/moderate/clear)
+  │  2. Constructs system prompt with grounding rules:
+  │     "Answer ONLY from the data provided. Do NOT use external knowledge."
+  │  3. Sends to Gemini with conversation history (last 10 messages)
+  ▼
+Google Gemini API (gemini-2.5-flash)
+  │  Temperature: 0.3 (factual), max_output_tokens: 1024
+  ▼
+Response returned to ChatWidget → rendered in chat panel
+```
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `backend/chatbot_service.py` | Gemini API client, data context builder, system prompt |
+| `backend/main.py` (`/api/chat`) | Chat endpoint — fetches results, calls chatbot service |
+| `frontend/src/components/ChatWidget.tsx` | Chat UI — violet/royal theme, Gemini icon, suggestion chips |
+| `frontend/src/services/api.ts` (`chat()`) | Frontend API method for chat |
+
+### API Configuration
+
+```env
+GEMINI_API_KEY=your_gemini_api_key    # From https://aistudio.google.com/
+```
+
+### Example Questions
+
+- "Summarize today's delivery plan"
+- "Which vehicle has the longest route?"
+- "Any late deliveries?"
+- "Compare Vehicle 3 and Vehicle 9"
+- "Weather impact on routes?"
+
+
 ## 📊 Excel Report Generation
 
 ### Overview

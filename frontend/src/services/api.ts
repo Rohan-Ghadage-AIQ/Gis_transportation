@@ -69,4 +69,11 @@ export const apiService = {
     async deleteVehicle(vehicleId: number): Promise<void> {
         await api.delete(`/api/fleet/${vehicleId}`);
     },
+
+    // ── Chatbot ──
+
+    async chat(message: string, history: { role: string; content: string }[] = []): Promise<string> {
+        const response = await api.post<{ response: string }>('/api/chat', { message, history });
+        return response.data.response;
+    },
 };

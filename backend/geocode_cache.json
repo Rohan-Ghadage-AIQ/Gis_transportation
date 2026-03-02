@@ -747,5 +747,250 @@
     "formatted_address": "89, Sarang St, Near Crawford Market, Lohar Chawl, Kalbadevi, Mumbai, Maharashtra, 400003, India",
     "confidence": 1.0,
     "source": "krutrim"
+  },
+  "26b418a6cad27d017795cf41c7747f06": {
+    "latitude": 19.0836,
+    "longitude": 72.8826,
+    "formatted_address": "Arabian Luqma, 173/5 Talav Chawal, Seetal Cinema, Near, Lal Bahadur Shastri Marg, Kurla West, Kurla, Mumbai, Maharashtra, 400070, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "245f7867409a6639137f496584199cf7": {
+    "latitude": 19.0814,
+    "longitude": 72.8851,
+    "formatted_address": "Yaantra - Mumbai, Kirol Road, Unit No. F/7, Kohinoor Mall, Ward No. L, Kirol Road, Kurla West, Kurla, Mumbai, Maharashtra, 400070, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "04a67ba8b1948ad31cf63771c1386200": {
+    "latitude": 19.0814,
+    "longitude": 72.8876,
+    "formatted_address": "Premier Road, Vidyavihar West, Vidyavihar, Mumbai, Maharashtra, 400070, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "580803a7364d40fe194ab297bd803fd8": {
+    "latitude": 19.086,
+    "longitude": 72.8809,
+    "formatted_address": "U2 Cake, Andheri - Kurla Rd, Opp. Bombay Municipal Corporation Building, Kurla West, Kurla, Mumbai, Maharashtra 400070, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "8ba282307e34ae322e35be1d133e10c4": {
+    "latitude": 19.0796,
+    "longitude": 72.8801,
+    "formatted_address": "Sahara Hotel, Shop 7/8, Solanki Apt, Lal Bahadur Shastri Marg, Kurla West, Kurla, Mumbai, Maharashtra 400070",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "4796d7923611234b6de6a90e559b99c4": {
+    "latitude": 19.0762,
+    "longitude": 72.8862,
+    "formatted_address": "Dr. Manjiri Bhusari, Building No 1, Kirol Road, Kirol Rd, Off Lal Bahadur Shastri Marg, Ali Yavar Jung, Kurla West, Kurla, Mumbai, Maharashtra, 400070, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "ac22f1fbea55f61589a4d1f89bea8fa3": {
+    "latitude": 19.0783,
+    "longitude": 72.9006,
+    "formatted_address": "3, Rajawadi 7th Rd, Rajawadi Colony, Ghatkopar East, Mumbai, Maharashtra, 400077, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "4aceb2c9063266fd3f1f9d94b31da767": {
+    "latitude": 19.0769,
+    "longitude": 72.8895,
+    "formatted_address": "Leaf Event's & Catering Services, Shop No-2, Building No-6, HDIL Premier Compound, Premier, Mhada Colony, Vidya Vihar Rd, Kurla West, Kurla, Mumbai, Maharashtra 400070, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "daef3bbb536ea67a948cfc02f8a4c23b": {
+    "latitude": 19.0791,
+    "longitude": 72.9086,
+    "formatted_address": "Mani's Cafe, Odeon Apartments, Ramnarayan Narkar Marg, Janak Kutir, Mhada Colony, Pant Nagar, Ghatkopar East, Mumbai, Maharashtra, 400077, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "0401684a039edbeab52825bf1a688784": {
+    "latitude": 19.0774,
+    "longitude": 72.9072,
+    "formatted_address": "Starbucks, Ground Floor, Dhoot Business Centre, DhanLaxmi Building, RB Mehta Marg, Near Shri, Jaigayatri Co-Op Housing Society, Sindhu Wadi, Ghatkopar East, Mumbai, Maharashtra, 400077, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "97d6e6e1abf03ed53a74c9084fca3d41": {
+    "latitude": 19.0705,
+    "longitude": 72.9119,
+    "formatted_address": "Shaddy YT, Akruti Rising City Wing K-9, Akruti Rising City, Mumbai, Maharashtra, 400075, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "fe419a665089219ebb013a9ebfb3eeae": {
+    "latitude": 19.0733,
+    "longitude": 72.9025,
+    "formatted_address": "Ambika Car Accessories, Ghatkopar - Mahul Rd, Ghatkopar, Vidyanagar, Vidya Vihar East, Ghatkopar East, Mumbai, Maharashtra, 400089, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "53c44862c63a4e9c1b75c0596ce09442": {
+    "latitude": 19.0586,
+    "longitude": 72.8788,
+    "formatted_address": "Bunts Sangha Mumbai, Takshashila Nagar, Qureshi Nagar, Kurla, Mumbai, Maharashtra, 400024, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "85395b154deee66faa66435fd269bfcc": {
+    "latitude": 19.0535,
+    "longitude": 72.8765,
+    "formatted_address": "Jogani Industrial Estate, VN Purav Marg, Panchsheel Nagar, Chunabhatti, Sion, Mumbai, Maharashtra, 400022, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "b428d409aec603f28bc00d60ade90362": {
+    "latitude": 19.0581,
+    "longitude": 72.8795,
+    "formatted_address": "Buntara Bhavan, Bhandari Estate, Buntara Bhavana Marg Kurla East, Near, Buntara Bhavan, Buntar Bhavan Cross Rd, Kasaiwada, Ati Staff CHS, Chunabhatti, Sion, Mumbai, Maharashtra, 400024, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "d7c6bb9e97f4e7eb60668795663cd77c": {
+    "latitude": 19.0682,
+    "longitude": 72.9061,
+    "formatted_address": "Shri Murugan Temple, Chembur West, Temple Complex, 71, Rd Number 2, Chembur West, Sector 1, Chedda Nagar, Mumbai, Maharashtra 400071, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "9b5a7686b624d862bbc4919a5f6e47ec": {
+    "latitude": 19.0801,
+    "longitude": 72.9056,
+    "formatted_address": "Achija Veg Restaurant, 1, Gala Garden View Society Valabhbagh Lane, Tilak Rd, Pant Nagar, Ghatkopar East, Mumbai, Maharashtra, 400077, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "c1eaab98ff89316736f4de4fd316f93c": {
+    "latitude": 19.0529,
+    "longitude": 72.8742,
+    "formatted_address": "Rajesh Fish Shop, Chunabhatti Fish Market, Sion Chunabhatti, Tadwadi, Chunabhatti, Sion, Mumbai, Maharashtra, 400024, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "d909b349ad4def9a05c6443d473608a4": {
+    "latitude": 19.0536,
+    "longitude": 72.8745,
+    "formatted_address": "N S Mankikar Rd, Tadwadi, Chunabhatti, Sion, Mumbai, Maharashtra, 400024, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "68a981720caa45a2fbd64778624de7e6": {
+    "latitude": 19.051,
+    "longitude": 72.8748,
+    "formatted_address": "Road Ready Motors, Aryan Building App, Bhaktidham Mandir Rd, Sion Chunabhatti, Samarth Nagar, Chunabhatti, Sion, Mumbai, Maharashtra, 400022, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "dd190fa3b313ff1dd736452845ba93c7": {
+    "latitude": 19.081114,
+    "longitude": 72.836485,
+    "formatted_address": "Mumbai, Mumbai Suburban, Maharashtra, 400054, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "54292090cae3d72e24f16ac4282551b8": {
+    "latitude": 19.05589,
+    "longitude": 72.87497,
+    "formatted_address": "3, Hill Rd, Sion Chunabhatti, Tadwadi, Chunabhatti, Sion, Mumbai, Maharashtra, 400024, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "194d80978241bfcb23083b1ced607d3b": {
+    "latitude": 19.0508,
+    "longitude": 72.8719,
+    "formatted_address": "Mohan Mansion, Dr.Jawkar Lane, Gulmohar LN, Samarth Nagar, Chunabhatti, Sion, Mumbai, Maharashtra, 400022, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "7804df8d7df403b3829ee4660e332b61": {
+    "latitude": 19.0521,
+    "longitude": 72.8679,
+    "formatted_address": "Evaan Mens Wear Designer, B 15 N.S. Near Chunabhatti Bus Depot, NS Mankikar Rd, Krishnalaya Society, Vrindavan, Chunabhatti, Sion, Mumbai, Maharashtra, 400022, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "64da1442756b28f88fd5234585599d22": {
+    "latitude": 19.0487,
+    "longitude": 72.8598,
+    "formatted_address": "1, Sant Rohidas Marg, Budhiram Seth Chawl, Kala Qila, Dharavi, Mumbai, Maharashtra, 400017, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "ef690c0d2a83ccf396239831266e8b24": {
+    "latitude": 19.04273,
+    "longitude": 72.86648,
+    "formatted_address": "Air Force Quarters 1 Block-5, Air Force Quarters-1, Rd Number 29, Air Force Quarters, Sion East, Sion, Mumbai, Maharashtra, 400022, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "f2532e3d2e47b92f5d7123d1a8c48134": {
+    "latitude": 19.0465,
+    "longitude": 72.8688,
+    "formatted_address": "Star Exim Management Consultancy & Services Pvt Ltd, Unit No. 12 A, Mahendra Industrial Premises, Plot No.109-D, Road No. 29, Sion (E), Sion East, Sion, Sion East, Sion, Mumbai, Maharashtra 400022, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "8f1b1bd335a9980a31a308af5170be88": {
+    "latitude": 19.0448,
+    "longitude": 72.8678,
+    "formatted_address": "Anuj Novelty Store, Sion Fort, Heritage Apartment, 29, Mukundrao Ambedkar Rd, Beside Of, Sion East, Sion, Mumbai, Maharashtra, 400022, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "a50bc1ed381df67270c8289b8d6cd1a4": {
+    "latitude": 19.0237,
+    "longitude": 72.8453,
+    "formatted_address": "Dadar Western Play, Zarapkar Stores, Senapati Bapat Marg, Matunga Central Railway Workshop, Hanuman Nagar, Matunga, Matunga Central Railway Workshop, Hanuman Nagar, Dadar, Mumbai, Maharashtra, 400019, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "15cebe23b5afc8c6c3ebce2cd3b40817": {
+    "latitude": 19.0281,
+    "longitude": 72.8411,
+    "formatted_address": "Monginis Cake Shop, Shop No 17, Hari Niwas Building, Lady Jamshedji Rd, Near Raja Rani Travels, Mahim West, Dadar, Mumbai, Maharashtra, 400016, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "7a982a2651acc111cfe77f98ee1a040a": {
+    "latitude": 19.0276,
+    "longitude": 72.855,
+    "formatted_address": "Mysore Concerns, No. 11, 391, Sri Shankar Matt, Circle House, Road, Matunga East, Mumbai, Maharashtra, 400019, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "730dfd55f71862b317b9880671f9d3f9": {
+    "latitude": 19.0315,
+    "longitude": 72.8424,
+    "formatted_address": "Janata Foot Wear, Shop No:1/2, Dutta Niwas, Takandas Kataria Marg, VSNL Colony, Matunga West, Mumbai, Maharashtra, 400016, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "ff3cb8fa1b08df4d5d18b6d7c9c5d7d1": {
+    "latitude": 19.0331,
+    "longitude": 72.8391,
+    "formatted_address": "Dr Dulari J Vora, Hinduja Hospital, Swatantrya Veer Savarkar Marg, Mahim West, 8-12, Swatantryaveer Savarkar Rd, Mahim West, Mahim, Mumbai, Maharashtra, 400016, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "a817e45cb30c9013263cae212b19a676": {
+    "latitude": 19.0282,
+    "longitude": 72.8369,
+    "formatted_address": "Hindusthan Post, Swatantryaveer Savarkar Rashtriya Smarak, Swatantryaveer, Swatantryaveer Savarkar Rd, Dadar West, Shivaji Park, Mumbai, Maharashtra, 400028, India",
+    "confidence": 1.0,
+    "source": "krutrim"
+  },
+  "ef87dd1c2c7e6005e9638480f38fbcdd": {
+    "latitude": 19.029,
+    "longitude": 72.8519,
+    "formatted_address": "Cycle.In - Your Prayer Store | Agarbatti & Puja Accessories, Cycle.In Store, Acharya Prayers, Vastu Matunga Building, Laxmi Narayan LN, Matunga (C.R.), Matunga East, Mumbai, Maharashtra, 400019, India",
+    "confidence": 1.0,
+    "source": "krutrim"
   }
 }
