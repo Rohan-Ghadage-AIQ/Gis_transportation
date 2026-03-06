@@ -55,6 +55,7 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 - **🆕 Refresh Traffic** — re-query congestion and re-generate route geometry on demand
 - **🆕 Traffic visualization** — color-coded route segments by congestion level
 - **🆕 AI Chatbot** — Gemini-powered analytics assistant on Results page (ask about routes, vehicles, parcels, weather)
+- **🆕 Auto Route Re-optimization** — background loop re-orders stops every 10 minutes based on live traffic (toggle ON/OFF in Stats Panel), keeping parcel-to-vehicle assignments fixed
 - View routes on interactive map with actual road geometries
 - Track vehicle utilization, costs, and schedules
 - Download formatted Excel reports with delivery details
@@ -91,6 +92,10 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 
 #### 3. Statistics Dashboard
 - **Summary Cards**: Total distance, cost, parcels, and active fleets
+- **🆕 Auto Traffic Optimization Toggle**: Enable/disable automatic route re-optimization
+  - Green pulse dot when active
+  - Shows last run time and interval (every 10 min)
+  - Toast notifications when routes change (⚡ Vehicle X re-optimized due to traffic)
 - **Vehicle Breakdown**: Expandable cards showing:
   - Distance traveled and operational cost
   - Weight carried vs capacity
@@ -117,6 +122,9 @@ This Vehicle Routing Optimization System solves the Vehicle Routing Problem (VRP
 - `GET /api/results` - Retrieve optimized routes and statistics
 - `GET /api/download-report` - Download Excel report with delivery details
 - **🆕** `POST /api/refresh-traffic` - Re-query traffic/weather, re-generate routes, detect reroutes
+- **🆕** `POST /api/reoptimize` - Manually re-optimize stop ordering (keeps assignments fixed)
+- **🆕** `POST /api/auto-reoptimize` - Toggle automatic re-optimization ON/OFF
+- **🆕** `GET /api/auto-reoptimize/status` - Check auto re-optimization status and last run
 
 #### Optimization Engine
 - **Google Route Optimization API** (Primary): OAuth2 Service Account, delivery-only capacity mode
@@ -165,6 +173,7 @@ GisTransportation4/
 │   ├── database.py             # PostgreSQL operations
 │   ├── vrp_solver.py           # VRP orchestration (Google + OR-Tools)
 │   ├── google_solver.py        # Google Route Optimization API (OAuth2)
+│   ├── reoptimize_routes.py    # 🆕 Auto route re-optimization (TSP per vehicle)
 │   ├── traffic_service.py      # Multi-source traffic (Google/TomTom)
 │   ├── weather_service.py      # OpenWeatherMap + monsoon simulation
 │   ├── report_generator.py     # Excel report generation

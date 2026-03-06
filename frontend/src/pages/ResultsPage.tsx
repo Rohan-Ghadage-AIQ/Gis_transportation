@@ -22,6 +22,10 @@ export const ResultsPage: React.FC = () => {
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'warning' } | null>(null);
     const [chatOpen, setChatOpen] = useState(false);
 
+    // Auto re-optimization state
+    const [autoReoptimize, setAutoReoptimize] = useState(false);
+    const [lastReoptimizeRun, setLastReoptimizeRun] = useState<string | null>(null);
+
     useEffect(() => {
         const fetchResults = async () => {
             try {
@@ -38,7 +42,70 @@ export const ResultsPage: React.FC = () => {
             }
         };
         fetchResults();
+
+        // Load auto-reoptimize status
+        apiService.getAutoReoptimizeStatus().then((status) => {
+            setAutoReoptimize(status.enabled);
+            setLastReoptimizeRun(status.last_run);
+        }).catch(() => { });
     }, [navigate]);
+
+    // Auto-poll for result changes when auto-reoptimize is ON
+    useEffect(() => {
+        if (!autoReoptimize) return;
+
+        const pollInterval = setInterval(async () => {
+            try {
+                // Check if any re-optimization happened
+                const status = await apiService.getAutoReoptimizeStatus();
+                setLastReoptimizeRun(status.last_run);
+
+                if (status.last_rerouted && status.last_rerouted.length > 0) {
+                    // Refresh results silently
+                    const data = await apiService.getResults();
+                    setResults(data);
+
+                    // Show toast notification
+                    const vehicleList = status.last_rerouted.map(v => `V${v}`).join(', ');
+                    setNotification({
+                        message: `⚡ ${vehicleList} route${status.last_rerouted.length > 1 ? 's' : ''} re-optimized due to traffic`,
+                        type: 'warning'
+                    });
+                    setTimeout(() => setNotification(null), 6000);
+                } else if (status.last_run !== lastReoptimizeRun) {
+                    // New run but no changes — still refresh
+                    const data = await apiService.getResults();
+                    setResults(data);
+                }
+            } catch {
+                // silently ignore poll errors
+            }
+        }, 30000); // Poll every 30 seconds
+
+        return () => clearInterval(pollInterval);
+    }, [autoReoptimize, lastReoptimizeRun]);
+
+    const handleToggleAutoReoptimize = async (enabled: boolean) => {
+        try {
+            const result = await apiService.toggleAutoReoptimize(enabled);
+            setAutoReoptimize(result.enabled);
+            setLastReoptimizeRun(result.last_run);
+
+            setNotification({
+                message: enabled
+                    ? '🔄 Auto traffic optimization enabled (every 10 min)'
+                    : '🛑 Auto traffic optimization disabled',
+                type: enabled ? 'success' : 'warning'
+            });
+            setTimeout(() => setNotification(null), 4000);
+        } catch {
+            setNotification({
+                message: 'Failed to toggle auto-optimization',
+                type: 'warning'
+            });
+            setTimeout(() => setNotification(null), 4000);
+        }
+    };
 
     const handleRefreshTraffic = async () => {
         setIsRefreshing(true);
@@ -233,7 +300,12 @@ export const ResultsPage: React.FC = () => {
                     width: '33%', overflow: 'hidden',
                     borderRight: '1px solid var(--border)'
                 }}>
-                    <StatsPanel results={results} />
+                    <StatsPanel
+                        results={results}
+                        autoReoptimize={autoReoptimize}
+                        onToggleAutoReoptimize={handleToggleAutoReoptimize}
+                        lastReoptimizeRun={lastReoptimizeRun}
+                    />
                 </div>
 
                 {/* Center Panel - Map */}

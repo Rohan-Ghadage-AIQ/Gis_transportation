@@ -61,6 +61,12 @@ Weather + Traffic sync → Backend generates road geometries → Frontend displa
 │  │ - OAuth2 SA  │  │ - Google API │  │ - OpenWeather│      │
 │  │ - Fleet API  │  │ - TomTom API │  │ - Monsoon Sim│      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
+│  ┌─────────────────────────────────────────────┐      │
+│  │ reoptimize_routes.py                              │      │
+│  │  - Auto re-optimization (TSP per vehicle)         │      │
+│  │  - Fixed assignments, re-orders stops only        │      │
+│  │  - Background loop (10-min interval)              │      │
+│  └─────────────────────────────────────────────┘      │
 │         │                  │                  │              │
 │         └──────────────────┴──────────────────┘              │
 │                            │                                 │
@@ -476,6 +482,28 @@ async def refresh_traffic():
     4. Detect rerouted vehicles
     5. Return updated results + reroute info
     """
+
+@app.post("/api/reoptimize")
+async def manual_reoptimize():
+    """
+    Manually trigger route re-optimization (stop reordering only).
+    Keeps parcel-to-vehicle assignments fixed.
+    Uses OR-Tools TSP or Google depending on USE_GOOGLE_OPTIMIZATION.
+    """
+
+@app.post("/api/auto-reoptimize")
+async def toggle_auto_reoptimize(body):
+    """
+    Toggle automatic background re-optimization ON/OFF.
+    When enabled, runs every 10 minutes via asyncio background task.
+    Body: {"enabled": true/false}
+    """
+
+@app.get("/api/auto-reoptimize/status")
+async def get_auto_reoptimize_status():
+    """
+    Returns: {enabled, interval_seconds, last_run, last_rerouted}
+    """
 ```
 
 #### 2. database.py (PostgreSQL Operations)
@@ -563,6 +591,32 @@ def solve_vrp(conn):
     7. Generate road geometries with avg_traffic_factor per segment
     """
 ```
+
+#### 4. reoptimize_routes.py (Auto Re-optimization)
+
+**Purpose**: Re-order delivery stops within each vehicle based on fresh traffic, WITHOUT changing parcel assignments.
+
+```python
+async def reoptimize_routes(warehouse_lon, warehouse_lat):
+    """
+    1. Read current vehicle→parcel assignments from station_node_map
+    2. Fetch fresh traffic data from TomTom/Google
+    3. Update road weights (traffic_factor, live_cost_s)
+    4. For each vehicle with ≥2 stops:
+       - OR-Tools: solve mini-TSP with updated distances
+       - Google: call Route Optimization with 1 vehicle + its parcels
+    5. Compare new vs old stop order → flag rerouted vehicles
+    6. Save updated geometries and arrival times
+    """
+```
+
+**Key Constraint**: Parcel assignments are read from DB and never modified. Only the visit ORDER changes.
+
+**Background Loop** (`_auto_reoptimize_loop` in `main.py`):
+- Runs as an `asyncio.Task` when user toggles ON
+- Sleeps for 600 seconds (10 minutes) between runs
+- Updates `LAST_VRP_METADATA` so frontend detects changes
+- Frontend polls `/api/auto-reoptimize/status` every 30 seconds
 
 **OR-Tools Model:**
 

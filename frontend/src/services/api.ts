@@ -70,6 +70,23 @@ export const apiService = {
         await api.delete(`/api/fleet/${vehicleId}`);
     },
 
+    // ── Auto Re-optimization ──
+
+    async toggleAutoReoptimize(enabled: boolean): Promise<{ enabled: boolean; interval_seconds: number; last_run: string | null }> {
+        const response = await api.post('/api/auto-reoptimize', { enabled });
+        return response.data;
+    },
+
+    async getAutoReoptimizeStatus(): Promise<{ enabled: boolean; interval_seconds: number; last_run: string | null; last_rerouted: number[] }> {
+        const response = await api.get('/api/auto-reoptimize/status');
+        return response.data;
+    },
+
+    async reoptimize(): Promise<{ success: boolean; rerouted_vehicles: number[]; total_reoptimized: number }> {
+        const response = await api.post('/api/reoptimize');
+        return response.data;
+    },
+
     // ── Chatbot ──
 
     async chat(message: string, history: { role: string; content: string }[] = []): Promise<string> {

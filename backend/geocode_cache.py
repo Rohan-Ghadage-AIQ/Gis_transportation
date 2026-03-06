@@ -20,7 +20,7 @@ def get_address_hash(address: str) -> str:
     Returns:
         MD5 hash of normalized address
     """
-    normalized = address.lower().strip()
+    normalized = str(address).lower().strip()
     return hashlib.md5(normalized.encode()).hexdigest()
 
 

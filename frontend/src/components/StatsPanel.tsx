@@ -3,6 +3,9 @@ import type { RouteResults } from '../types/api';
 
 interface StatsPanelProps {
     results: RouteResults;
+    autoReoptimize?: boolean;
+    onToggleAutoReoptimize?: (enabled: boolean) => void;
+    lastReoptimizeRun?: string | null;
 }
 
 /* ── SVG Icon Components ── */
@@ -27,7 +30,7 @@ const FleetIcon = () => (
     </svg>
 );
 
-export const StatsPanel: React.FC<StatsPanelProps> = ({ results }) => {
+export const StatsPanel: React.FC<StatsPanelProps> = ({ results, autoReoptimize, onToggleAutoReoptimize, lastReoptimizeRun }) => {
     const { summary, vehicles } = results;
 
     return (
@@ -42,6 +45,59 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ results }) => {
             }}>
                 Route Statistics
             </h2>
+
+            {/* Auto Re-optimization Toggle */}
+            <div style={{
+                background: autoReoptimize ? 'linear-gradient(135deg, #ecfdf5, #f0fdf4)' : 'var(--bg)',
+                border: `1px solid ${autoReoptimize ? '#86efac' : 'var(--border-light)'}`,
+                borderRadius: 10, padding: '10px 14px', marginBottom: 14,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                transition: 'all 0.3s ease',
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {autoReoptimize && (
+                        <span style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: '#22c55e', display: 'inline-block',
+                            boxShadow: '0 0 6px #22c55e',
+                            animation: 'pulse 2s infinite',
+                        }} />
+                    )}
+                    <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                            Auto Traffic Optimization
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                            {autoReoptimize
+                                ? `Active · Every 10 min${lastReoptimizeRun ? ` · Last: ${new Date(lastReoptimizeRun).toLocaleTimeString()}` : ''}`
+                                : 'Disabled'}
+                        </div>
+                    </div>
+                </div>
+                <label style={{
+                    position: 'relative', display: 'inline-block',
+                    width: 44, height: 24, flexShrink: 0, cursor: 'pointer',
+                }}>
+                    <input
+                        type="checkbox"
+                        checked={autoReoptimize || false}
+                        onChange={(e) => onToggleAutoReoptimize?.(e.target.checked)}
+                        style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span style={{
+                        position: 'absolute', inset: 0, borderRadius: 12,
+                        background: autoReoptimize ? '#22c55e' : '#cbd5e1',
+                        transition: 'background 0.3s ease',
+                    }}>
+                        <span style={{
+                            position: 'absolute', top: 2, left: autoReoptimize ? 22 : 2,
+                            width: 20, height: 20, borderRadius: '50%',
+                            background: '#fff', transition: 'left 0.3s ease',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                        }} />
+                    </span>
+                </label>
+            </div>
 
             {/* Weather Alert Banner */}
             {results.weather_alerts && results.weather_alerts.length > 0 && (

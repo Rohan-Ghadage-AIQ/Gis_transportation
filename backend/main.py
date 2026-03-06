@@ -88,8 +88,8 @@ conn = get_db_connection()
 # Global variables
 uploaded_data = None
 warehouse_config = {
-    "latitude": 19.0760,  # Mumbai default
-    "longitude": 72.8777
+    "latitude": 19.05507294355211,
+    "longitude": 72.87538873375874
 }
 
 # Transient VRP metadata (weather alerts, rerouted vehicles)
@@ -98,6 +98,15 @@ LAST_VRP_METADATA = {
     "weather_alerts": [],
     "weather_rerouted": False,
     "rerouted_vehicles": []
+}
+
+# Auto re-optimization state
+AUTO_REOPTIMIZE = {
+    "enabled": False,
+    "interval_seconds": 600,  # 10 minutes
+    "task": None,              # asyncio.Task reference
+    "last_run": None,
+    "last_rerouted": [],
 }
 
 # Shift logic for time windows
@@ -275,7 +284,7 @@ async def upload_file(file: UploadFile = File(...)):
         # These are used internally by the VRP solver but not shown in UI
         exclude_columns = ['latitude', 'longitude', 'window_start', 'window_end_minutes', 'formatted_address', 'geocode_confidence', 'geocode_source']
         display_columns = [col for col in df.columns if col not in exclude_columns]
-        display_data = df[display_columns].to_dict(orient='records')
+        display_data = df[display_columns].fillna('').to_dict(orient='records')
         
         return JSONResponse(content={
             "status": "success",
@@ -940,6 +949,95 @@ async def chat_endpoint(req: ChatRequest):
     except Exception as e:
         print(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== AUTO RE-OPTIMIZATION =====
+
+async def _auto_reoptimize_loop():
+    """Background loop that re-optimizes routes every 10 minutes."""
+    import asyncio
+    from reoptimize_routes import reoptimize_routes
+    
+    while AUTO_REOPTIMIZE["enabled"]:
+        await asyncio.sleep(AUTO_REOPTIMIZE["interval_seconds"])
+        if not AUTO_REOPTIMIZE["enabled"]:
+            break
+        try:
+            print(f"\n🔄 [Auto Re-optimize] Running scheduled re-optimization...")
+            result = await reoptimize_routes(
+                warehouse_lon=warehouse_config["longitude"],
+                warehouse_lat=warehouse_config["latitude"],
+            )
+            AUTO_REOPTIMIZE["last_run"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            AUTO_REOPTIMIZE["last_rerouted"] = result.get("rerouted_vehicles", [])
+            
+            global LAST_VRP_METADATA
+            if result.get("rerouted_vehicles"):
+                LAST_VRP_METADATA["rerouted_vehicles"] = result["rerouted_vehicles"]
+                print(f"  ⚡ Rerouted vehicles: {result['rerouted_vehicles']}")
+            else:
+                print(f"  ✓ No route changes needed")
+        except Exception as e:
+            print(f"  ❌ Auto re-optimize error: {e}")
+    print("🛑 [Auto Re-optimize] Background loop stopped.")
+
+
+@app.post("/api/reoptimize")
+async def manual_reoptimize():
+    """Manually trigger route re-optimization (keeps parcel assignments fixed)."""
+    from reoptimize_routes import reoptimize_routes
+    try:
+        result = await reoptimize_routes(
+            warehouse_lon=warehouse_config["longitude"],
+            warehouse_lat=warehouse_config["latitude"],
+        )
+        AUTO_REOPTIMIZE["last_run"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        AUTO_REOPTIMIZE["last_rerouted"] = result.get("rerouted_vehicles", [])
+        
+        global LAST_VRP_METADATA
+        if result.get("rerouted_vehicles"):
+            LAST_VRP_METADATA["rerouted_vehicles"] = result["rerouted_vehicles"]
+        
+        return JSONResponse(content=result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/auto-reoptimize")
+async def toggle_auto_reoptimize(body: dict):
+    """Toggle automatic route re-optimization on/off."""
+    import asyncio
+    enabled = body.get("enabled", False)
+    
+    if enabled and not AUTO_REOPTIMIZE["enabled"]:
+        AUTO_REOPTIMIZE["enabled"] = True
+        AUTO_REOPTIMIZE["task"] = asyncio.create_task(_auto_reoptimize_loop())
+        print("✅ Auto re-optimization ENABLED (every 10 minutes)")
+    elif not enabled and AUTO_REOPTIMIZE["enabled"]:
+        AUTO_REOPTIMIZE["enabled"] = False
+        if AUTO_REOPTIMIZE["task"]:
+            AUTO_REOPTIMIZE["task"].cancel()
+            AUTO_REOPTIMIZE["task"] = None
+        print("🛑 Auto re-optimization DISABLED")
+    
+    return JSONResponse(content={
+        "enabled": AUTO_REOPTIMIZE["enabled"],
+        "interval_seconds": AUTO_REOPTIMIZE["interval_seconds"],
+        "last_run": AUTO_REOPTIMIZE["last_run"],
+    })
+
+
+@app.get("/api/auto-reoptimize/status")
+async def get_auto_reoptimize_status():
+    """Get current auto re-optimization status."""
+    return JSONResponse(content={
+        "enabled": AUTO_REOPTIMIZE["enabled"],
+        "interval_seconds": AUTO_REOPTIMIZE["interval_seconds"],
+        "last_run": AUTO_REOPTIMIZE["last_run"],
+        "last_rerouted": AUTO_REOPTIMIZE["last_rerouted"],
+    })
 
 
 if __name__ == "__main__":
