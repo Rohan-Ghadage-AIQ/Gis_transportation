@@ -93,4 +93,25 @@ export const apiService = {
         const response = await api.post<{ response: string }>('/api/chat', { message, history });
         return response.data.response;
     },
+
+    // ── Maintenance Module ──
+
+    async maintenanceUpload(file: File): Promise<any> {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await api.post('/api/maintenance/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data;
+    },
+
+    async maintenanceCompute(body: { team_size: number; office_lat?: number; office_lon?: number }): Promise<any> {
+        const response = await api.post('/api/maintenance/compute', body);
+        return response.data;
+    },
+
+    async maintenanceResults(): Promise<any> {
+        const response = await api.get('/api/maintenance/results');
+        return response.data;
+    },
 };

@@ -1,0 +1,51 @@
+id,address,parcel_weight,service_time,window_end
+1,"Wing-D, Station Rd, Bhayandar, Chandulal Park, Bhayandar West, Mira Bhayandar, Maharashtra 401101",25,15,07:42:00
+2,"Dr Keshav Baliram Hedgewar Rd, Bhayandar, Chandmal Nagar, Bhayandar West, Mira Bhayandar, Maharashtra 401101",10,10,16:30:00
+3,"Ravi Raj Industries, Gala No. 33, Behind Dharam Kanta, Near Janseva Shakari Bank, Phatak Road, Bhayander East, Thane, Maharashtra 401105",22,12,15:11:00
+4,"Kasturi Industrial Estate, V/8, G-1, Bhayandar, Sonam Sagar, Indira Nagar, Bhayandar East, Mumbai, Mira Bhayandar, Maharashtra 401105",12,18,15:28:00
+5,"Road, Golden Nest Circle, Phase 9, silent park, Bhayandar East, Mira Bhayandar, Mumbai, Maharashtra 401105",18,15,12:00:00
+6,"B11, Road, Medetiya Nagar, Queens Park, Mira Road East, Mumbai, Mira Bhayandar, Maharashtra 401105",16,10,09:29:00
+7,"302, Kanakia Township, Gaurav City, Mira Road East, Mira Bhayandar, Maharashtra 401107",14,12,13:40:00
+8,"below Wilfred School, near TVS Showroom, Sanghvi Nagar, Pleasant Park, Mira Road East, Mumbai, Mira Bhayandar, Maharashtra 401107",15,18,20:58:00
+9,"8/102, Shanti Gardens Rd, Sector 2, Gaurav Galaxy, Mira Road East, Mira Bhayandar, Maharashtra 401107",8,15,08:51:00
+10,"Swagat Inn,Mira Road East, Mira Bhayandar, Maharashtra 401107",19,10,08:57:00
+11,"A-WING, Blue Bell Society, Avdhut Nagar, Dahisar East, Mumbai, Maharashtra 400068",25,12,08:49:00
+12,"Kwini House, Mosquita Nagar, A2, Hari Shankar Joshi Rd, Krishna Colony, Dahisar East, Mumbai, Maharashtra 400068",10,18,16:44:00
+13,"Mhatre Wadi, Dahisar West, Mumbai, Maharashtra 400068",22,15,12:00:00
+14,"6VX4+QFR, Santoshi Mata Rd, Jai Yogeshwari, Mandapeshwar, Dahisar West, Mumbai, Maharashtra 400068",12,10,12:25:00
+15,"A6-18, LIC Rd Number 2, Aary Colony, LIC Colony, Borivali West, Mumbai, Maharashtra 400103",18,12,15:47:00
+16,"MHADA Bldg, 2-A, Gorai 3, Borivali West, Mumbai, Maharashtra 400091",16,18,16:22:00
+17,"Samabhav Society, Gorai 2, Borivali, Mumbai, Maharashtra 400091",14,15,16:40:00
+18,"GALA NO 23,24 & 25 SAI COMPOUND CTS NO 149,, SURVEY NO 29 HISSA NO 13 LAXMI NAGAR CHARKOP VILLAGE, Mumbai, Maharashtra 400067",15,10,17:02:00
+19,"Gate Number 8, 52, 409, Mhada Rd, opposite Bus Depot, Gaikwad Nagar, Malvani, Malad West, Mumbai, Maharashtra 400095",8,12,12:31:00
+20,"5RG5+FWQ, Malad, Ambojwadi, Malad West, Mumbai, Maharashtra 400095",19,18,09:41:00
+21,"Yari Rd, Achal Avichal Chanchal, Versova, Andheri West, Mumbai, Maharashtra 400061",15,15,10:47:00
+22,"Silver View, 35, JP Rd, Jeet Nagar, Versova, Andheri West, Mumbai, Maharashtra 400061",18,10,08:00:00
+23,"37/22, Manish Nagar, Gharkul Society, Manish Nagar, 4 Bungalow, Andheri West, Mumbai, Maharashtra 400053",17,12,16:23:00
+24,"35, Lallubhai Park Rd, Navpada, T E Colony, Andheri West, Mumbai, Maharashtra 400058",16,18,09:38:00
+25,"Church Rd, opposite st xavier school, Labh Siddhi Society, LIC Colony, Suresh Colony, Vile Parle West, Mumbai,",15,15,09:56:00
+26,"Smraat Watch Shop Mohd Zuber Alam ,Shop No.5, Laundry Gali, Govind Nagar, Santacruz (West), Mumbai",10,10,15:39:00
+27,"3RFF+X3H, Ram Mandir Marg, Opposite Shivsena Shakha, Pyari Nagar, Khar Road West, Danda Village, Khar Danda, Mumbai, Maharashtra 400052",26,12,20:27:00
+28,"Shadaab Tower, Sherly Rajan Rd, Rizvi Complex, Shirley, Bandra West, Mumbai, Maharashtra 400050",14,18,10:04:00
+29,"113, Sangeet Samrat Naushad Ali Rd, Bandra West, Mumbai, Maharashtra 400050",15,15,07:47:00
+30,"34/A, Chimbai Rd, Chimbai Village, Bandra West, Mumbai, Maharashtra 400050",10,10,12:09:00
+31,"Agnel Technical Education, Bandstand Promenade, Mount Mary, Bandra West, Mumbai, Maharashtra 400050",9,12,11:11:00
+32,"81, Khan Abdul Gaffar Khan Road, Police Camp, Worli Sea Face, Worli, Mumbai, Maharashtra 400030",17,18,10:29:00
+33,"Dhun Apartment, Worli Hill Rd, Siddharth Nagar, Worli, Mumbai, Maharashtra 400018",16,15,10:15:00
+34,"Everest Building,Dr Gopalrao Deshmukh Marg, opp. 12, IT Colony, Cumballa Hill, Mumbai",15,10,08:52:00
+35,"89, Nepean Sea Rd, Navshanti Nagar, Malabar Hill, Mumbai, Maharashtra 400006",10,12,13:55:00
+36,"Prabhat Building, Churchgate,41, B Rd, Churchgate, Mumbai, Maharashtra 400020",26,18,08:54:00
+37,"SOHANLAL GUPTA SHOP,Garden Rd, near Bharat Petroleum, Apollo Bandar, Colaba, Mumbai",14,15,20:21:00
+38,"Happy Home,380, Telang Cross Rd Number 3, Brhmanwada, Matunga East, Mumbai, Maharashtra 400019",15,10,10:37:00
+39,"hinducolony 5lane kesar polaris,5th Ln, Hindu Colony, Dadar, Mumbai, Maharashtra 400014",10,12,08:57:00
+40,"32, Tilak Marg Number 2, Lokmanya Tilak Colony, Dadar, Mumbai, Maharashtra 400014",9,18,18:24:00
+41,"Itone (India) Pvt. Ltd.,312 Jogani Industrial Estate, Senapati Bapat Marg, Dadar (west), Mumbai",10,15,14:50:00
+42,"Century Mill Mhada Building,Century Mills, Lower Parel, Mumbai, Maharashtra 400030",22,10,14:57:00
+43,"Ocean House, Sudam Kalu Ahire Marg, B Wing, BDD Chawls Worli, Worli, Mumbai, Maharashtra 400018",12,12,16:17:00
+44,"Samudra mahal,Shiv Sagar Estate, Worli, Mumbai, Maharashtra 400018",18,18,10:50:00
+45,"Sophia College Ln , Breach Candy, Cumballa Hill, Mumbai, Maharashtra 400026\",16,15,08:23:00
+46,"SHRIPAL NAGAR SOCIETY RAJA HAREEPAL, Harkness Rd, Navshanti Nagar, Malabar Hill, Mumbai, Maharashtra 400006",14,10,08:11:00
+47,"Crawford Market, Sarang St, next to Sadanand Hotel, Lohar Chawl, Kalbadevi, Mumbai, Maharashtra 400003",15,12,15:52:00
+48,"B.I.T. Chawl No. 4, 4, Tadwadi, Mazgaon, Mumbai, Maharashtra 400010",8,18,12:00:00
+49,"Asim Vegetables,Bhaji Market, Byculla West, Chinchpokli, Mumbai, Maharashtra 400027",19,15,14:01:00
+50,"Dr.Ambedkar road, Bhai Bal Mukund Marg, Byculla, Mumbai, Maharashtra 400012",15,10,12:00:00

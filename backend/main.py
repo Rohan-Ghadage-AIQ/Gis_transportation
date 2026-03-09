@@ -31,6 +31,7 @@ from vrp_solver import solve_vrp
 from geocoding import batch_geocode
 from weather_service import weather_service
 from chatbot_service import chat as chatbot_chat, build_data_context
+from maintenance_routes import router as maintenance_router
 
 load_dotenv()
 
@@ -81,6 +82,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount maintenance module routes
+app.include_router(maintenance_router)
 
 # Database connection
 conn = get_db_connection()
