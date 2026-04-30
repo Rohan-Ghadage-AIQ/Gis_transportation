@@ -1,5 +1,10 @@
 # 🚚 Vehicle Routing Optimization System
 
+> **🚀 Quick Start**: Run the entire application (frontend + backend) with a single command (Windows):
+> ```cmd
+> .\start.bat
+> ```
+
 A full-stack web application for optimizing vehicle routing with **Google Route Optimization API**, **live traffic integration**, weather simulation, real-time visualization, and delivery fleet management — built with React, FastAPI, PostgreSQL/PostGIS, pgRouting, and multi-source traffic APIs.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
