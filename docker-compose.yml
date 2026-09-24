@@ -1,4 +1,36 @@
+# ============================================================
+# GIS Transportation — Docker Compose (Full Stack)
+# Run: docker-compose up --build
+# ============================================================
+
 services:
+
+  # ── PostgreSQL + PostGIS + pgRouting ──────────────────────
+  db:
+    build:
+      context: ./db
+      dockerfile: Dockerfile
+    container_name: gis_db
+    environment:
+      POSTGRES_DB: routing
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      # Mount the backup file (must exist in project root)
+      - ./routing_backup.backup:/backup/routing_backup.backup:ro
+      # Persist database data across restarts
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d routing"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: always
+
+  # ── FastAPI Backend ──────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -8,8 +40,21 @@ services:
       - "8000:8000"
     env_file:
       - ./backend/.env
+    environment:
+      # Override database connection to use the local container
+      # (these take priority over values in backend/.env)
+      DB_NAME: routing
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      FRONTEND_URL: http://localhost
+    depends_on:
+      db:
+        condition: service_healthy
     restart: always
 
+  # ── React Frontend (Nginx) ──────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -20,3 +65,7 @@ services:
     depends_on:
       - backend
     restart: always
+
+volumes:
+  pgdata:
+    driver: local

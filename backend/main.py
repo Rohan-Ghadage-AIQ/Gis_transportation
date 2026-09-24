@@ -61,6 +61,10 @@ async def lifespan(app: FastAPI):
         cur.close()
         conn.close()
         print("✓ Database tables initialized")
+        
+        # Log the frontend URL so users can easily click it in the terminal
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost")
+        print(f"\n🌐 Frontend Application is available at: {frontend_url}\n")
     except Exception as e:
         print(f"⚠️  Warning: Could not initialize tables: {e}")
     yield

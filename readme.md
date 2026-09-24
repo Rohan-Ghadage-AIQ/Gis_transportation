@@ -1,6 +1,14 @@
 # 🚚 Vehicle Routing Optimization System
 
-> **🚀 Quick Start**: Run the entire application (frontend + backend) with a single command (Windows):
+> **🚀 Quick Start (Docker — Recommended)**:
+> ```bash
+> docker-compose up --build
+> ```
+> Then open [http://localhost](http://localhost) in your browser. That's it!
+> 
+> See [DOCKER_GUIDE.md](DOCKER_GUIDE.md) for detailed setup instructions.
+>
+> **Alternative (Local Development)**: If you have Python, Node.js, and a database configured locally:
 > ```cmd
 > .\start.bat
 > ```

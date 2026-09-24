@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIS Transportation — Route Visualization</title>
+    <meta name="description" content="Interactive route visualization for GIS Transportation & Vehicle Routing Optimization">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface-2: #242836;
+            --border: #2d3148;
+            --text: #e4e7f1;
+            --text-dim: #8b90a5;
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.15);
+            --green: #22c55e;
+            --yellow: #eab308;
+            --orange: #f97316;
+            --red: #dc2626;
+            --cyan: #06b6d4;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ── Header ── */
+        .header {
+            height: 56px;
+            background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 16px;
+            z-index: 1000;
+        }
+
+        .header-logo {
+            font-size: 20px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .header-subtitle {
+            font-size: 12px;
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+
+        .header-badge {
+            margin-left: auto;
+            background: var(--primary-glow);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* ── Layout ── */
+        .layout {
+            display: flex;
+            height: calc(100vh - 56px);
+        }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            width: 360px;
+            min-width: 360px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+
+        .sidebar::-webkit-scrollbar { width: 6px; }
+        .sidebar::-webkit-scrollbar-track { background: transparent; }
+        .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        .section {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-dim);
+            margin-bottom: 12px;
+        }
+
+        /* ── Summary Cards ── */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .stat-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+            transition: all 0.2s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--text);
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: var(--text-dim);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+        }
+
+        /* ── Vehicle List ── */
+        .vehicle-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.25s;
+            border-left: 4px solid transparent;
+        }
+
+        .vehicle-card:hover {
+            border-color: var(--primary);
+            transform: translateX(3px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .vehicle-card.active {
+            border-left-color: var(--primary);
+            background: rgba(99, 102, 241, 0.08);
+        }
+
+        .vehicle-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .vehicle-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .vehicle-name {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .vehicle-badge {
+            margin-left: auto;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .vehicle-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 4px;
+        }
+
+        .vehicle-detail {
+            font-size: 10px;
+            color: var(--text-dim);
+        }
+
+        .vehicle-detail span {
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        /* ── Traffic Legend ── */
+        .legend {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        /* ── Weather Alerts ── */
+        .weather-alert {
+            background: rgba(220, 38, 38, 0.08);
+            border: 1px solid rgba(220, 38, 38, 0.25);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 6px;
+            font-size: 11px;
+        }
+
+        .weather-alert.moderate {
+            background: rgba(249, 115, 22, 0.08);
+            border-color: rgba(249, 115, 22, 0.25);
+        }
+
+        .weather-station {
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .weather-desc {
+            color: var(--text-dim);
+            margin-top: 2px;
+        }
+
+        /* ── Stops List ── */
+        .stop-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            transition: background 0.2s;
+        }
+
+        .stop-item:hover {
+            background: var(--surface-2);
+        }
+
+        .stop-number {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+
+        .stop-name { flex: 1; font-weight: 500; }
+        .stop-time { color: var(--text-dim); font-weight: 600; }
+
+        .stop-status {
+            font-size: 9px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 8px;
+        }
+
+        .stop-status.buffer { background: rgba(34,197,94,0.15); color: var(--green); }
+        .stop-status.ontime { background: rgba(234,179,8,0.15); color: var(--yellow); }
+        .stop-status.late { background: rgba(220,38,38,0.15); color: var(--red); }
+
+        /* ── Map Container ── */
+        .map-wrap {
+            flex: 1;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ── Map Controls ── */
+        .map-controls {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .map-btn {
+            width: 38px;
+            height: 38px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface);
+            color: var(--text);
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            backdrop-filter: blur(10px);
+        }
+
+        .map-btn:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+            transform: scale(1.05);
+        }
+
+        .map-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        /* ── Animated Pulse on Markers ── */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 1; }
+            100% { transform: scale(2.2); opacity: 0; }
+        }
+
+        .pulse-marker {
+            position: relative;
+        }
+
+        .pulse-marker::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid currentColor;
+            animation: pulse-ring 2s ease-out infinite;
+        }
+
+        /* Leaflet popup override */
+        .leaflet-popup-content-wrapper {
+            background: var(--surface) !important;
+            color: var(--text) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5) !important;
+        }
+
+        .leaflet-popup-tip {
+            background: var(--surface) !important;
+            border: 1px solid var(--border) !important;
+        }
+
+        .leaflet-popup-content {
+            margin: 10px 14px !important;
+            font-family: 'Inter', sans-serif !important;
+            font-size: 12px !important;
+            line-height: 1.5 !important;
+        }
+
+        .popup-title {
+            font-weight: 800;
+            font-size: 14px;
+            margin-bottom: 6px;
+        }
+
+        .popup-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 2px 0;
+        }
+
+        .popup-label { color: var(--text-dim); }
+        .popup-value { font-weight: 700; }
+
+        /* ── Info Tooltip ── */
+        .info-overlay {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            z-index: 1000;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: 11px;
+            color: var(--text-dim);
+            backdrop-filter: blur(10px);
+            max-width: 260px;
+        }
+
+        .info-overlay strong {
+            color: var(--text);
+        }
+
+        /* ── Animations ── */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-in {
+            animation: fadeInUp 0.4s ease-out both;
+        }
+
+        .animate-in:nth-child(2) { animation-delay: 0.05s; }
+        .animate-in:nth-child(3) { animation-delay: 0.1s; }
+        .animate-in:nth-child(4) { animation-delay: 0.15s; }
+        .animate-in:nth-child(5) { animation-delay: 0.2s; }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <div class="header-logo">🚚 GIS Transportation</div>
+    <div class="header-subtitle">Vehicle Routing Optimization — Route Visualization</div>
+    <div class="header-badge">📍 Mumbai, Maharashtra</div>
+</div>
+
+<!-- Layout -->
+<div class="layout">
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <!-- Summary -->
+        <div class="section">
+            <div class="section-title">📊 Route Summary</div>
+            <div class="summary-grid" id="summary-grid"></div>
+        </div>
+
+        <!-- Traffic Legend -->
+        <div class="section">
+            <div class="section-title">🚦 Traffic Legend</div>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div> Free Flow (≤1.1×)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#eab308"></div> Light (1.1–1.5×)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div> Moderate (1.5–2.0×)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#dc2626"></div> Heavy (>2.0×)</div>
+            </div>
+        </div>
+
+        <!-- Weather Alerts -->
+        <div class="section" id="weather-section" style="display:none">
+            <div class="section-title">⛈️ Weather Alerts</div>
+            <div id="weather-alerts"></div>
+        </div>
+
+        <!-- Vehicle List -->
+        <div class="section">
+            <div class="section-title">🚗 Vehicles</div>
+            <div id="vehicle-list"></div>
+        </div>
+
+        <!-- Stops (shown when vehicle selected) -->
+        <div class="section" id="stops-section" style="display:none">
+            <div class="section-title" id="stops-title">📦 Route Stops</div>
+            <div id="stops-list"></div>
+        </div>
+    </div>
+
+    <!-- Map -->
+    <div class="map-wrap">
+        <div id="map"></div>
+
+        <div class="map-controls">
+            <button class="map-btn" onclick="fitAllRoutes()" title="Fit all routes">🗺️</button>
+            <button class="map-btn" id="btn-traffic" onclick="toggleTrafficColors()" title="Toggle traffic colors">🚦</button>
+            <button class="map-btn" id="btn-stations" onclick="toggleStations()" title="Toggle stations">📍</button>
+            <button class="map-btn" id="btn-weather" onclick="toggleWeather()" title="Toggle weather">⛈️</button>
+            <button class="map-btn" id="btn-water" onclick="toggleWaterLogging()" title="Toggle water logging">🌊</button>
+        </div>
+
+        <div class="info-overlay">
+            <strong>Interactive Route Map</strong><br>
+            Click a vehicle card to highlight its route. Click markers for details. Use controls to toggle layers.
+        </div>
+    </div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Load water logging data (generated via python spectral analysis) -->
+<script src="water_logging_data.js"></script>
+
+<script>
+// =============================================================================
+// SAMPLE DATA — Realistic Mumbai delivery routes
+// =============================================================================
+
+const WAREHOUSE = { lat: 19.0725, lon: 72.8724, name: "AIQ Warehouse (Dadar)" };
+
+const VEHICLE_COLORS = [
+    "#6366f1", "#f43f5e", "#06b6d4", "#22c55e",
+    "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6"
+];
+
+// Sample routes with realistic Mumbai coordinates and waypoints
+const ROUTES = [
+    {
+        vehicle_id: 1,
+        name: "Vehicle 1",
+        color: VEHICLE_COLORS[0],
+        capacity_kg: 175,
+        cost_per_km: 15,
+        shift: "09:00 – 18:00",
+        total_weight: 168,
+        distance_km: 42.3,
+        cost: 634.5,
+        work_duration: 143,
+        stops: [
+            { id: "P001", name: "Andheri West", lat: 19.1368, lon: 72.8296, arrival: "09:28", status: "IN_BUFFER", weight: 25 },
+            { id: "P005", name: "Goregaon East", lat: 19.1633, lon: 72.8490, arrival: "09:55", status: "IN_BUFFER", weight: 30 },
+            { id: "P012", name: "Malad West", lat: 19.1872, lon: 72.8484, arrival: "10:18", status: "ON TIME", weight: 22 },
+            { id: "P019", name: "Kandivali East", lat: 19.2055, lon: 72.8569, arrival: "10:42", status: "ON TIME", weight: 28 },
+            { id: "P024", name: "Borivali West", lat: 19.2280, lon: 72.8546, arrival: "11:08", status: "IN_BUFFER", weight: 35 },
+            { id: "P031", name: "Dahisar", lat: 19.2502, lon: 72.8625, arrival: "11:35", status: "LATE", weight: 28 },
+        ],
+        segments: [
+            { points: [[19.0725,72.8724],[19.0800,72.8650],[19.0980,72.8450],[19.1150,72.8350],[19.1368,72.8296]], traffic: 1.8 },
+            { points: [[19.1368,72.8296],[19.1450,72.8380],[19.1550,72.8430],[19.1633,72.8490]], traffic: 1.2 },
+            { points: [[19.1633,72.8490],[19.1720,72.8488],[19.1800,72.8485],[19.1872,72.8484]], traffic: 1.0 },
+            { points: [[19.1872,72.8484],[19.1950,72.8510],[19.2000,72.8540],[19.2055,72.8569]], traffic: 2.3 },
+            { points: [[19.2055,72.8569],[19.2150,72.8560],[19.2200,72.8550],[19.2280,72.8546]], traffic: 1.5 },
+            { points: [[19.2280,72.8546],[19.2350,72.8570],[19.2430,72.8600],[19.2502,72.8625]], traffic: 1.0 },
+            { points: [[19.2502,72.8625],[19.2350,72.8650],[19.1800,72.8600],[19.1200,72.8650],[19.0725,72.8724]], traffic: 1.3 },
+        ]
+    },
+    {
+        vehicle_id: 2,
+        name: "Vehicle 2",
+        color: VEHICLE_COLORS[1],
+        capacity_kg: 261,
+        cost_per_km: 20,
+        shift: "09:00 – 18:00",
+        total_weight: 245,
+        distance_km: 38.7,
+        cost: 774.0,
+        work_duration: 128,
+        stops: [
+            { id: "P002", name: "Bandra West", lat: 19.0596, lon: 72.8295, arrival: "09:22", status: "IN_BUFFER", weight: 35 },
+            { id: "P008", name: "Khar West", lat: 19.0717, lon: 72.8361, arrival: "09:42", status: "IN_BUFFER", weight: 28 },
+            { id: "P015", name: "Santacruz East", lat: 19.0810, lon: 72.8458, arrival: "10:05", status: "ON TIME", weight: 42 },
+            { id: "P022", name: "Vile Parle", lat: 19.0983, lon: 72.8435, arrival: "10:30", status: "IN_BUFFER", weight: 38 },
+            { id: "P028", name: "Jogeshwari", lat: 19.1260, lon: 72.8488, arrival: "10:55", status: "ON TIME", weight: 50 },
+            { id: "P035", name: "Oshiwara", lat: 19.1490, lon: 72.8365, arrival: "11:18", status: "IN_BUFFER", weight: 52 },
+        ],
+        segments: [
+            { points: [[19.0725,72.8724],[19.0680,72.8600],[19.0630,72.8450],[19.0596,72.8295]], traffic: 2.5 },
+            { points: [[19.0596,72.8295],[19.0640,72.8320],[19.0680,72.8340],[19.0717,72.8361]], traffic: 1.1 },
+            { points: [[19.0717,72.8361],[19.0750,72.8400],[19.0780,72.8430],[19.0810,72.8458]], traffic: 1.0 },
+            { points: [[19.0810,72.8458],[19.0880,72.8450],[19.0930,72.8440],[19.0983,72.8435]], traffic: 1.4 },
+            { points: [[19.0983,72.8435],[19.1060,72.8450],[19.1150,72.8470],[19.1260,72.8488]], traffic: 1.7 },
+            { points: [[19.1260,72.8488],[19.1350,72.8430],[19.1420,72.8400],[19.1490,72.8365]], traffic: 1.0 },
+            { points: [[19.1490,72.8365],[19.1300,72.8450],[19.1100,72.8550],[19.0900,72.8650],[19.0725,72.8724]], traffic: 1.2 },
+        ]
+    },
+    {
+        vehicle_id: 3,
+        name: "Vehicle 3",
+        color: VEHICLE_COLORS[2],
+        capacity_kg: 348,
+        cost_per_km: 25,
+        shift: "07:00 – 15:00",
+        total_weight: 320,
+        distance_km: 55.2,
+        cost: 1380.0,
+        work_duration: 195,
+        stops: [
+            { id: "P003", name: "Worli", lat: 19.0176, lon: 72.8153, arrival: "07:35", status: "IN_BUFFER", weight: 45 },
+            { id: "P009", name: "Lower Parel", lat: 19.0050, lon: 72.8310, arrival: "08:02", status: "IN_BUFFER", weight: 38 },
+            { id: "P016", name: "Prabhadevi", lat: 19.0160, lon: 72.8285, arrival: "08:28", status: "ON TIME", weight: 55 },
+            { id: "P023", name: "Mahim", lat: 19.0395, lon: 72.8398, arrival: "08:55", status: "IN_BUFFER", weight: 42 },
+            { id: "P030", name: "Sion", lat: 19.0430, lon: 72.8622, arrival: "09:22", status: "IN_BUFFER", weight: 48 },
+            { id: "P037", name: "Kurla West", lat: 19.0660, lon: 72.8780, arrival: "09:50", status: "ON TIME", weight: 52 },
+            { id: "P042", name: "Chembur", lat: 19.0622, lon: 72.8972, arrival: "10:15", status: "LATE", weight: 40 },
+        ],
+        segments: [
+            { points: [[19.0725,72.8724],[19.0550,72.8500],[19.0350,72.8300],[19.0176,72.8153]], traffic: 1.6 },
+            { points: [[19.0176,72.8153],[19.0120,72.8200],[19.0080,72.8260],[19.0050,72.8310]], traffic: 3.2 },
+            { points: [[19.0050,72.8310],[19.0080,72.8295],[19.0120,72.8290],[19.0160,72.8285]], traffic: 1.0 },
+            { points: [[19.0160,72.8285],[19.0230,72.8330],[19.0310,72.8365],[19.0395,72.8398]], traffic: 1.3 },
+            { points: [[19.0395,72.8398],[19.0400,72.8450],[19.0410,72.8530],[19.0430,72.8622]], traffic: 1.8 },
+            { points: [[19.0430,72.8622],[19.0500,72.8680],[19.0580,72.8730],[19.0660,72.8780]], traffic: 2.1 },
+            { points: [[19.0660,72.8780],[19.0650,72.8850],[19.0635,72.8910],[19.0622,72.8972]], traffic: 1.0 },
+            { points: [[19.0622,72.8972],[19.0650,72.8900],[19.0680,72.8800],[19.0725,72.8724]], traffic: 1.4 },
+        ]
+    },
+    {
+        vehicle_id: 4,
+        name: "Vehicle 4",
+        color: VEHICLE_COLORS[3],
+        capacity_kg: 156,
+        cost_per_km: 12,
+        shift: "07:00 – 18:00",
+        total_weight: 148,
+        distance_km: 31.5,
+        cost: 378.0,
+        work_duration: 110,
+        stops: [
+            { id: "P004", name: "Colaba", lat: 18.9067, lon: 72.8147, arrival: "07:45", status: "IN_BUFFER", weight: 20 },
+            { id: "P010", name: "Fort", lat: 18.9340, lon: 72.8358, arrival: "08:12", status: "IN_BUFFER", weight: 25 },
+            { id: "P017", name: "Marine Lines", lat: 18.9440, lon: 72.8234, arrival: "08:35", status: "ON TIME", weight: 30 },
+            { id: "P025", name: "Girgaon", lat: 18.9550, lon: 72.8150, arrival: "09:00", status: "IN_BUFFER", weight: 22 },
+            { id: "P033", name: "Grant Road", lat: 18.9630, lon: 72.8180, arrival: "09:22", status: "ON TIME", weight: 28 },
+            { id: "P040", name: "Mumbai Central", lat: 18.9710, lon: 72.8190, arrival: "09:45", status: "IN_BUFFER", weight: 23 },
+        ],
+        segments: [
+            { points: [[19.0725,72.8724],[19.0400,72.8550],[19.0100,72.8400],[18.9700,72.8250],[18.9400,72.8180],[18.9067,72.8147]], traffic: 1.9 },
+            { points: [[18.9067,72.8147],[18.9150,72.8200],[18.9250,72.8280],[18.9340,72.8358]], traffic: 2.8 },
+            { points: [[18.9340,72.8358],[18.9380,72.8310],[18.9410,72.8270],[18.9440,72.8234]], traffic: 1.0 },
+            { points: [[18.9440,72.8234],[18.9480,72.8200],[18.9520,72.8170],[18.9550,72.8150]], traffic: 1.3 },
+            { points: [[18.9550,72.8150],[18.9580,72.8160],[18.9610,72.8170],[18.9630,72.8180]], traffic: 1.0 },
+            { points: [[18.9630,72.8180],[18.9660,72.8185],[18.9690,72.8188],[18.9710,72.8190]], traffic: 1.1 },
+            { points: [[18.9710,72.8190],[18.9900,72.8300],[19.0200,72.8450],[19.0500,72.8600],[19.0725,72.8724]], traffic: 1.5 },
+        ]
+    },
+    {
+        vehicle_id: 5,
+        name: "Vehicle 5",
+        color: VEHICLE_COLORS[4],
+        capacity_kg: 178,
+        cost_per_km: 15,
+        shift: "09:00 – 17:00",
+        total_weight: 170,
+        distance_km: 48.6,
+        cost: 729.0,
+        work_duration: 155,
+        stops: [
+            { id: "P006", name: "Powai", lat: 19.1176, lon: 72.9060, arrival: "09:40", status: "IN_BUFFER", weight: 32 },
+            { id: "P013", name: "Vikhroli", lat: 19.1100, lon: 72.9280, arrival: "10:08", status: "ON TIME", weight: 25 },
+            { id: "P020", name: "Kanjurmarg", lat: 19.1280, lon: 72.9340, arrival: "10:35", status: "IN_BUFFER", weight: 38 },
+            { id: "P027", name: "Bhandup", lat: 19.1470, lon: 72.9380, arrival: "11:00", status: "ON TIME", weight: 28 },
+            { id: "P034", name: "Mulund West", lat: 19.1720, lon: 72.9430, arrival: "11:28", status: "IN_BUFFER", weight: 22 },
+            { id: "P041", name: "Thane West", lat: 19.1960, lon: 72.9630, arrival: "11:55", status: "LATE", weight: 25 },
+        ],
+        segments: [
+            { points: [[19.0725,72.8724],[19.0800,72.8800],[19.0900,72.8900],[19.1050,72.9000],[19.1176,72.9060]], traffic: 1.4 },
+            { points: [[19.1176,72.9060],[19.1150,72.9130],[19.1120,72.9200],[19.1100,72.9280]], traffic: 1.0 },
+            { points: [[19.1100,72.9280],[19.1150,72.9300],[19.1220,72.9320],[19.1280,72.9340]], traffic: 2.4 },
+            { points: [[19.1280,72.9340],[19.1350,72.9355],[19.1410,72.9370],[19.1470,72.9380]], traffic: 1.6 },
+            { points: [[19.1470,72.9380],[19.1550,72.9400],[19.1630,72.9415],[19.1720,72.9430]], traffic: 1.0 },
+            { points: [[19.1720,72.9430],[19.1800,72.9500],[19.1880,72.9570],[19.1960,72.9630]], traffic: 1.2 },
+            { points: [[19.1960,72.9630],[19.1700,72.9400],[19.1400,72.9200],[19.1100,72.9000],[19.0725,72.8724]], traffic: 1.1 },
+        ]
+    }
+];
+
+const WEATHER_ALERTS = [
+    { station_id: "P009", name: "Lower Parel", lat: 19.0050, lon: 72.8310, rain_mm: 9.3, severity: "heavy", description: "Heavy Rain (9.3 mm/hr)" },
+    { station_id: "P020", name: "Kanjurmarg", lat: 19.1280, lon: 72.9340, rain_mm: 8.1, severity: "heavy", description: "Heavy Rain (8.1 mm/hr)" },
+    { station_id: "P005", name: "Goregaon East", lat: 19.1633, lon: 72.8490, rain_mm: 4.5, severity: "moderate", description: "Moderate Rain (4.5 mm/hr)" },
+];
+
+// =============================================================================
+// MAP INITIALIZATION
+// =============================================================================
+
+const map = L.map('map', {
+    center: [19.076, 72.877],
+    zoom: 12,
+    zoomControl: false,
+    attributionControl: false
+});
+
+// Dark tile layer
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+}).addTo(map);
+
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+L.control.attribution({ position: 'bottomright', prefix: false })
+    .addAttribution('© <a href="https://carto.com">CARTO</a> | © <a href="https://osm.org">OSM</a>')
+    .addTo(map);
+
+// =============================================================================
+// LAYER GROUPS
+// =============================================================================
+
+const routeLayers = {};      // vehicle_id -> L.layerGroup
+const stationMarkers = L.layerGroup().addTo(map);
+const weatherMarkers = L.layerGroup().addTo(map);
+const waterLoggingLayer = L.layerGroup();
+let warehouseMarker = null;
+let showTrafficColors = true;
+let showStations = true;
+let showWeather = true;
+let showWaterLogging = false;
+let activeVehicleId = null;
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+function trafficColor(factor) {
+    if (factor >= 2.0) return '#dc2626';
+    if (factor >= 1.5) return '#f97316';
+    if (factor >= 1.1) return '#eab308';
+    return '#22c55e';
+}
+
+function trafficLabel(factor) {
+    if (factor >= 2.0) return 'Heavy';
+    if (factor >= 1.5) return 'Moderate';
+    if (factor >= 1.1) return 'Light';
+    return 'Free Flow';
+}
+
+function createStationIcon(color, label) {
+    return L.divIcon({
+        className: '',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        html: `<div style="
+            width:28px; height:28px; border-radius:50%;
+            background:${color}; border:3px solid #fff;
+            display:flex; align-items:center; justify-content:center;
+            font-size:10px; font-weight:800; color:#fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 12px ${color}44;
+            font-family:Inter,sans-serif;
+        ">${label}</div>`
+    });
+}
+
+function createWarehouseIcon() {
+    return L.divIcon({
+        className: '',
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+        html: `<div style="
+            width:40px; height:40px; border-radius:50%;
+            background:linear-gradient(135deg, #6366f1, #06b6d4);
+            border:3px solid #fff;
+            display:flex; align-items:center; justify-content:center;
+            font-size:18px;
+            box-shadow: 0 4px 16px rgba(99,102,241,0.5), 0 0 20px rgba(99,102,241,0.3);
+        ">🏭</div>`
+    });
+}
+
+function createWeatherIcon(severity) {
+    const emoji = severity === 'heavy' ? '🌧️' : '🌦️';
+    const color = severity === 'heavy' ? '#dc2626' : '#f97316';
+    return L.divIcon({
+        className: '',
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        html: `<div style="
+            width:34px; height:34px; border-radius:50%;
+            background:${color}22; border:2px solid ${color};
+            display:flex; align-items:center; justify-content:center;
+            font-size:16px;
+            box-shadow: 0 0 16px ${color}44;
+            animation: pulse-ring 2s ease-out infinite;
+        ">${emoji}</div>`
+    });
+}
+
+// =============================================================================
+// RENDER ROUTES ON MAP
+// =============================================================================
+
+function renderRoutes() {
+    // Warehouse marker
+    warehouseMarker = L.marker([WAREHOUSE.lat, WAREHOUSE.lon], { icon: createWarehouseIcon() })
+        .bindPopup(`
+            <div class="popup-title">🏭 ${WAREHOUSE.name}</div>
+            <div class="popup-row"><span class="popup-label">Role</span><span class="popup-value">Depot / Warehouse</span></div>
+            <div class="popup-row"><span class="popup-label">Coordinates</span><span class="popup-value">${WAREHOUSE.lat.toFixed(4)}, ${WAREHOUSE.lon.toFixed(4)}</span></div>
+            <div class="popup-row"><span class="popup-label">Vehicles</span><span class="popup-value">${ROUTES.length} deployed</span></div>
+        `)
+        .addTo(map);
+
+    // Draw each vehicle's route
+    ROUTES.forEach(route => {
+        const group = L.layerGroup();
+
+        // Draw route segments with traffic colors
+        route.segments.forEach((seg, si) => {
+            const color = showTrafficColors ? trafficColor(seg.traffic) : route.color;
+            const polyline = L.polyline(seg.points, {
+                color: color,
+                weight: 5,
+                opacity: 0.85,
+                lineCap: 'round',
+                lineJoin: 'round'
+            });
+
+            polyline.bindPopup(`
+                <div class="popup-title" style="color:${route.color}">🚗 ${route.name} — Segment ${si + 1}</div>
+                <div class="popup-row"><span class="popup-label">Traffic Factor</span><span class="popup-value" style="color:${trafficColor(seg.traffic)}">${seg.traffic.toFixed(1)}× (${trafficLabel(seg.traffic)})</span></div>
+            `);
+
+            polyline.addTo(group);
+        });
+
+        // Station markers
+        route.stops.forEach((stop, idx) => {
+            const marker = L.marker([stop.lat, stop.lon], {
+                icon: createStationIcon(route.color, idx + 1)
+            });
+
+            const statusColor = stop.status === 'IN_BUFFER' ? '#22c55e' :
+                               stop.status === 'ON TIME' ? '#eab308' : '#dc2626';
+
+            marker.bindPopup(`
+                <div class="popup-title" style="color:${route.color}">📦 ${stop.id} — ${stop.name}</div>
+                <div class="popup-row"><span class="popup-label">Vehicle</span><span class="popup-value" style="color:${route.color}">${route.name}</span></div>
+                <div class="popup-row"><span class="popup-label">Arrival</span><span class="popup-value">${stop.arrival}</span></div>
+                <div class="popup-row"><span class="popup-label">Status</span><span class="popup-value" style="color:${statusColor}">${stop.status}</span></div>
+                <div class="popup-row"><span class="popup-label">Weight</span><span class="popup-value">${stop.weight} kg</span></div>
+                <div class="popup-row"><span class="popup-label">Stop #</span><span class="popup-value">${idx + 1} of ${route.stops.length}</span></div>
+            `);
+
+            marker.addTo(stationMarkers);
+        });
+
+        group.addTo(map);
+        routeLayers[route.vehicle_id] = group;
+    });
+
+    // Weather markers
+    WEATHER_ALERTS.forEach(alert => {
+        const marker = L.marker([alert.lat, alert.lon], {
+            icon: createWeatherIcon(alert.severity)
+        });
+
+        marker.bindPopup(`
+            <div class="popup-title">⛈️ Weather Alert — ${alert.name}</div>
+            <div class="popup-row"><span class="popup-label">Station</span><span class="popup-value">${alert.station_id}</span></div>
+            <div class="popup-row"><span class="popup-label">Rainfall</span><span class="popup-value" style="color:#dc2626">${alert.rain_mm} mm/hr</span></div>
+            <div class="popup-row"><span class="popup-label">Severity</span><span class="popup-value" style="color:${alert.severity === 'heavy' ? '#dc2626' : '#f97316'}">${alert.severity.toUpperCase()}</span></div>
+            <div class="popup-row"><span class="popup-label">Road Penalty</span><span class="popup-value">${alert.severity === 'heavy' ? '10.0×' : '3.0×'}</span></div>
+        `);
+
+        marker.addTo(weatherMarkers);
+    });
+}
+
+// =============================================================================
+// RENDER SIDEBAR
+// =============================================================================
+
+function renderSummary() {
+    const totalParcels = ROUTES.reduce((s, r) => s + r.stops.length, 0);
+    const totalDistance = ROUTES.reduce((s, r) => s + r.distance_km, 0);
+    const totalCost = ROUTES.reduce((s, r) => s + r.cost, 0);
+    const totalWeight = ROUTES.reduce((s, r) => s + r.total_weight, 0);
+
+    document.getElementById('summary-grid').innerHTML = `
+        <div class="stat-card animate-in">
+            <div class="stat-value">${ROUTES.length}</div>
+            <div class="stat-label">Vehicles Used</div>
+        </div>
+        <div class="stat-card animate-in">
+            <div class="stat-value">${totalParcels}</div>
+            <div class="stat-label">Total Deliveries</div>
+        </div>
+        <div class="stat-card animate-in">
+            <div class="stat-value">${totalDistance.toFixed(1)}</div>
+            <div class="stat-label">Total Km</div>
+        </div>
+        <div class="stat-card animate-in">
+            <div class="stat-value">₹${totalCost.toFixed(0)}</div>
+            <div class="stat-label">Total Cost</div>
+        </div>
+    `;
+}
+
+function renderVehicles() {
+    const container = document.getElementById('vehicle-list');
+    container.innerHTML = '';
+
+    ROUTES.forEach(route => {
+        const util = ((route.total_weight / route.capacity_kg) * 100).toFixed(0);
+        const utilColor = util > 90 ? '#dc2626' : util > 70 ? '#f59e0b' : '#22c55e';
+
+        const card = document.createElement('div');
+        card.className = `vehicle-card animate-in ${activeVehicleId === route.vehicle_id ? 'active' : ''}`;
+        card.innerHTML = `
+            <div class="vehicle-header">
+                <div class="vehicle-color" style="background:${route.color}; color:${route.color}"></div>
+                <div class="vehicle-name">${route.name}</div>
+                <div class="vehicle-badge" style="background:${utilColor}22; color:${utilColor}">${util}% load</div>
+            </div>
+            <div class="vehicle-details">
+                <div class="vehicle-detail">📦 <span>${route.stops.length}</span> stops</div>
+                <div class="vehicle-detail">📏 <span>${route.distance_km}</span> km</div>
+                <div class="vehicle-detail">💰 <span>₹${route.cost.toFixed(0)}</span></div>
+                <div class="vehicle-detail">⚖️ <span>${route.total_weight}/${route.capacity_kg}</span> kg</div>
+                <div class="vehicle-detail">⏱️ <span>${route.work_duration}</span> min</div>
+                <div class="vehicle-detail">🕐 <span>${route.shift}</span></div>
+            </div>
+        `;
+
+        card.onclick = () => selectVehicle(route.vehicle_id);
+        container.appendChild(card);
+    });
+}
+
+function renderWeatherAlerts() {
+    if (WEATHER_ALERTS.length === 0) return;
+
+    document.getElementById('weather-section').style.display = 'block';
+    const container = document.getElementById('weather-alerts');
+    container.innerHTML = '';
+
+    WEATHER_ALERTS.forEach(alert => {
+        const div = document.createElement('div');
+        div.className = `weather-alert ${alert.severity === 'moderate' ? 'moderate' : ''}`;
+        div.innerHTML = `
+            <div class="weather-station">${alert.severity === 'heavy' ? '🌧️' : '🌦️'} ${alert.station_id} — ${alert.name}</div>
+            <div class="weather-desc">${alert.description} | Road penalty: ${alert.severity === 'heavy' ? '10.0×' : '3.0×'}</div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function renderStops(vehicleId) {
+    const route = ROUTES.find(r => r.vehicle_id === vehicleId);
+    if (!route) return;
+
+    document.getElementById('stops-section').style.display = 'block';
+    document.getElementById('stops-title').textContent = `📦 ${route.name} — Route Stops`;
+
+    const container = document.getElementById('stops-list');
+    container.innerHTML = '';
+
+    // Depot start
+    const depotStart = document.createElement('div');
+    depotStart.className = 'stop-item';
+    depotStart.innerHTML = `
+        <div class="stop-number" style="background:#6366f1; color:#fff">🏭</div>
+        <div class="stop-name">Depot (Dadar)</div>
+        <div class="stop-time">${route.shift.split('–')[0].trim()}</div>
+        <div class="stop-status buffer">START</div>
+    `;
+    container.appendChild(depotStart);
+
+    route.stops.forEach((stop, idx) => {
+        const statusClass = stop.status === 'IN_BUFFER' ? 'buffer' :
+                           stop.status === 'ON TIME' ? 'ontime' : 'late';
+        const item = document.createElement('div');
+        item.className = 'stop-item animate-in';
+        item.innerHTML = `
+            <div class="stop-number" style="background:${route.color}; color:#fff">${idx + 1}</div>
+            <div class="stop-name">${stop.id} — ${stop.name} (${stop.weight}kg)</div>
+            <div class="stop-time">${stop.arrival}</div>
+            <div class="stop-status ${statusClass}">${stop.status}</div>
+        `;
+        item.onclick = (e) => {
+            e.stopPropagation();
+            map.setView([stop.lat, stop.lon], 15);
+        };
+        container.appendChild(item);
+    });
+
+    // Depot return
+    const depotEnd = document.createElement('div');
+    depotEnd.className = 'stop-item';
+    depotEnd.innerHTML = `
+        <div class="stop-number" style="background:#6366f1; color:#fff">🏭</div>
+        <div class="stop-name">Return to Depot</div>
+        <div class="stop-time">—</div>
+        <div class="stop-status buffer">END</div>
+    `;
+    container.appendChild(depotEnd);
+}
+
+// =============================================================================
+// INTERACTIONS
+// =============================================================================
+
+function selectVehicle(vehicleId) {
+    if (activeVehicleId === vehicleId) {
+        // Deselect
+        activeVehicleId = null;
+        Object.values(routeLayers).forEach(g => {
+            g.eachLayer(l => { if (l.setStyle) l.setStyle({ opacity: 0.85, weight: 5 }); });
+        });
+        document.getElementById('stops-section').style.display = 'none';
+    } else {
+        activeVehicleId = vehicleId;
+        // Dim other routes, highlight selected
+        Object.entries(routeLayers).forEach(([vid, g]) => {
+            const isActive = parseInt(vid) === vehicleId;
+            g.eachLayer(l => {
+                if (l.setStyle) l.setStyle({
+                    opacity: isActive ? 1.0 : 0.15,
+                    weight: isActive ? 7 : 3
+                });
+            });
+        });
+
+        // Zoom to route
+        const route = ROUTES.find(r => r.vehicle_id === vehicleId);
+        if (route) {
+            const allPoints = route.segments.flatMap(s => s.points);
+            const bounds = L.latLngBounds(allPoints);
+            map.fitBounds(bounds, { padding: [60, 60] });
+        }
+
+        renderStops(vehicleId);
+    }
+
+    renderVehicles();
+}
+
+function fitAllRoutes() {
+    activeVehicleId = null;
+    Object.values(routeLayers).forEach(g => {
+        g.eachLayer(l => { if (l.setStyle) l.setStyle({ opacity: 0.85, weight: 5 }); });
+    });
+    document.getElementById('stops-section').style.display = 'none';
+
+    const allPoints = ROUTES.flatMap(r => r.segments.flatMap(s => s.points));
+    const bounds = L.latLngBounds(allPoints);
+    map.fitBounds(bounds, { padding: [40, 40] });
+
+    renderVehicles();
+}
+
+function toggleTrafficColors() {
+    showTrafficColors = !showTrafficColors;
+    document.getElementById('btn-traffic').classList.toggle('active', showTrafficColors);
+
+    Object.entries(routeLayers).forEach(([vid, group]) => {
+        const route = ROUTES.find(r => r.vehicle_id === parseInt(vid));
+        let segIdx = 0;
+        group.eachLayer(l => {
+            if (l.setStyle && route && route.segments[segIdx]) {
+                const seg = route.segments[segIdx];
+                l.setStyle({ color: showTrafficColors ? trafficColor(seg.traffic) : route.color });
+                segIdx++;
+            }
+        });
+    });
+}
+
+function toggleStations() {
+    showStations = !showStations;
+    document.getElementById('btn-stations').classList.toggle('active', !showStations);
+    if (showStations) stationMarkers.addTo(map);
+    else map.removeLayer(stationMarkers);
+}
+
+function toggleWeather() {
+    showWeather = !showWeather;
+    document.getElementById('btn-weather').classList.toggle('active', !showWeather);
+    if (showWeather) weatherMarkers.addTo(map);
+    else map.removeLayer(weatherMarkers);
+}
+
+function loadWaterLoggingData() {
+    if (typeof WATER_LOGGING_DATA === 'undefined') {
+        console.error("Water logging data not found! Make sure water_logging_data.js is loaded.");
+        return;
+    }
+    
+    // We are now using robust topographical water logging data (Physical Basins)
+    const significantPoints = WATER_LOGGING_DATA.features;
+    
+    L.geoJSON(significantPoints, {
+        pointToLayer: function (feature, latlng) {
+            return L.circleMarker(latlng, {
+                radius: 5,
+                fillColor: "#06b6d4",
+                color: "#ffffff",
+                weight: 1.5,
+                opacity: 1,
+                fillOpacity: 0.9
+            });
+        },
+        onEachFeature: function (feature, layer) {
+            layer.bindPopup(`
+                <div class="popup-title" style="color:#06b6d4">🌊 Flooded Road Zone</div>
+                <div class="popup-row"><span class="popup-label">NDWI (Moisture)</span><span class="popup-value">${feature.properties.ndwi.toFixed(2)}</span></div>
+                <div class="popup-row"><span class="popup-label">NDBI (Concrete)</span><span class="popup-value">${feature.properties.ndbi.toFixed(2)}</span></div>
+            `);
+        }
+    }).addTo(waterLoggingLayer);
+}
+
+function toggleWaterLogging() {
+    showWaterLogging = !showWaterLogging;
+    document.getElementById('btn-water').classList.toggle('active', showWaterLogging);
+    if (showWaterLogging) {
+        waterLoggingLayer.addTo(map);
+        // If data is huge, we might want to alert the user it's visible now
+    } else {
+        map.removeLayer(waterLoggingLayer);
+    }
+}
+
+// =============================================================================
+// INITIALIZE
+// =============================================================================
+
+renderRoutes();
+renderSummary();
+renderVehicles();
+renderWeatherAlerts();
+loadWaterLoggingData();
+fitAllRoutes();
+
+// Activate traffic button by default
+document.getElementById('btn-traffic').classList.add('active');
+</script>
+
+</body>
+</html>
