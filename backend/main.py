@@ -117,14 +117,14 @@ AUTO_REOPTIMIZE = {
     "last_rerouted": [],
 }
 
-# Shift logic for time windows
+# Shift intervals for report grouping
 SHIFTS = [(420, 600), (600, 1080), (1080, 1260)]  # 07:00-10:00, 10:00-18:00, 18:00-21:00
 
-def parse_window_end(val):
-    """Parse HH:MM:SS string to minutes from midnight"""
+def _parse_time_to_minutes(val, default_minutes):
+    """Parse HH:MM:SS string (or integer minutes) to minutes from midnight."""
     try:
         if val is None or pd.isna(val):
-            return 600
+            return default_minutes
         val_str = str(val).strip()
         if ':' in val_str:
             parts = val_str.split(':')
@@ -142,15 +142,22 @@ def parse_window_end(val):
         except:
             pass
             
-        return 600  # Default: 10:00
-    except Exception as e:
-        # print(f"Error parsing window_end {val}: {e}")
-        return 600  # Default: 10:00
+        return default_minutes
+    except Exception:
+        return default_minutes
 
-def get_shift_start(window_end_minutes):
-    """Auto-assign window_start to the start of the matching shift"""
+def parse_window_end(val):
+    """Parse window_end (HH:MM:SS or minutes) to minutes from midnight. Default: 10:00 AM."""
+    return _parse_time_to_minutes(val, 600)
+
+def parse_window_start(val):
+    """Parse window_start (HH:MM:SS or minutes) to minutes from midnight. Default: 07:00 AM."""
+    return _parse_time_to_minutes(val, 420)
+
+def classify_shift(time_minutes):
+    """Classify a time (in minutes from midnight) into a shift bucket for report grouping."""
     for shift_start, shift_end in SHIFTS:
-        if window_end_minutes <= shift_end:
+        if time_minutes < shift_end:
             return shift_start
     return SHIFTS[-1][0]  # Fallback: last shift
 
@@ -208,7 +215,7 @@ async def upload_file(file: UploadFile = File(...)):
             df = pd.read_csv(io.BytesIO(contents))
         
         # Validate required columns
-        required_base_columns = ['id', 'parcel_weight', 'service_time', 'window_end']
+        required_base_columns = ['id', 'parcel_weight', 'service_time', 'window_start', 'window_end']
         missing_columns = [col for col in required_base_columns if col not in df.columns]
         
         if missing_columns:
@@ -280,17 +287,23 @@ async def upload_file(file: UploadFile = File(...)):
         uploaded_data = df
         
         
-        # Convert window_end and compute window_start
+        # Parse customer-provided time windows (HH:MM:SS → minutes from midnight)
         uploaded_data['window_end_minutes'] = uploaded_data['window_end'].apply(parse_window_end)
-        uploaded_data['window_start'] = uploaded_data['window_end_minutes'].apply(get_shift_start)
+        uploaded_data['window_start_minutes'] = uploaded_data['window_start'].apply(parse_window_start)
         
-        print(f"✓ Parsed window_end (HH:MM:SS → minutes) and auto-assigned window_start from shifts")
+        # Validate: window_start must be before window_end
+        invalid_windows = uploaded_data[uploaded_data['window_start_minutes'] >= uploaded_data['window_end_minutes']]
+        if len(invalid_windows) > 0:
+            print(f"⚠️  WARNING: {len(invalid_windows)} parcels have window_start >= window_end. Fixing by setting window_start to 2 hours before window_end.")
+            for idx in invalid_windows.index:
+                uploaded_data.at[idx, 'window_start_minutes'] = max(0, uploaded_data.at[idx, 'window_end_minutes'] - 120)
         
-        # Prepare response data - exclude technical/geocoding columns
-        # Users don't need to see: latitude, longitude, window_start, formatted_address, geocode_confidence, geocode_source
-        # window_end is kept visible as it shows the requested delivery time
-        # These are used internally by the VRP solver but not shown in UI
-        exclude_columns = ['latitude', 'longitude', 'window_start', 'window_end_minutes', 'formatted_address', 'geocode_confidence', 'geocode_source']
+        print(f"✓ Parsed customer time windows: window_start & window_end (HH:MM:SS → minutes)")
+        
+        # Prepare response data - exclude technical/internal columns
+        # window_start and window_end are customer-provided and shown in UI
+        # Internal computed columns (minutes, coordinates, geocoding metadata) are hidden
+        exclude_columns = ['latitude', 'longitude', 'window_start_minutes', 'window_end_minutes', 'formatted_address', 'geocode_confidence', 'geocode_source']
         display_columns = [col for col in df.columns if col not in exclude_columns]
         display_data = df[display_columns].fillna('').to_dict(orient='records')
         
@@ -323,18 +336,20 @@ async def update_data(update: DataUpdate):
         # Convert updated data to DataFrame
         updated_df = pd.DataFrame(update.data)
         
-        # Ensure 24-hour time is parsed to minutes
+        # Re-parse time columns if user edited them
         if 'window_end' in updated_df.columns:
             updated_df['window_end_minutes'] = updated_df['window_end'].apply(parse_window_end)
+        if 'window_start' in updated_df.columns:
+            updated_df['window_start_minutes'] = updated_df['window_start'].apply(parse_window_start)
         
         print(f"Updated data columns: {list(updated_df.columns)}")
         print(f"Original data columns: {list(uploaded_data.columns) if uploaded_data is not None else 'None'}")
         
-        # Preserve internal columns (latitude, longitude, window_start, etc.) from original data
-        # Only update user-editable columns
+        # Preserve internal columns (coordinates, geocoding metadata) from original data
+        # window_start and window_end are user-editable and come from updated_df
         if uploaded_data is not None and len(uploaded_data) > 0:
-            # Columns that should be preserved from original data
-            preserve_columns = ['latitude', 'longitude', 'window_start', 'window_end_minutes', 'formatted_address', 
+            # Columns that should be preserved from original data (non-editable internals)
+            preserve_columns = ['latitude', 'longitude', 'window_start_minutes', 'window_end_minutes', 'formatted_address', 
                               'geocode_confidence', 'geocode_source']
             
             # Start with updated data

@@ -122,13 +122,14 @@ def insert_stations_from_dataframe(conn, df: pd.DataFrame, warehouse_lon: float 
     data = []
     for _, row in df.iterrows():
         raw_we = row.get('window_end_minutes', row.get('window_end', 600))
+        raw_ws = row.get('window_start_minutes', row.get('window_start', 420))
         data.append((
             str(row['id']),
             float(row['latitude']),
             float(row['longitude']),
             safe_int(row.get('parcel_weight'), 20),
             safe_int(row.get('service_time'), 10),
-            safe_int(row.get('window_start'), 420),
+            safe_int(raw_ws, 420),
             safe_int(raw_we, 600)
         ))
     

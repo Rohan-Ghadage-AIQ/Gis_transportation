@@ -235,15 +235,25 @@ def generate_delivery_report(conn) -> bytes:
         600: "10:00 - 18:00",
         1080: "18:00 - 21:00"
     }
+    
+    def _classify_to_shift(time_minutes):
+        """Classify a customer time into the nearest shift bucket."""
+        if time_minutes < 600:
+            return 420
+        elif time_minutes < 1080:
+            return 600
+        else:
+            return 1080
 
-    # Group parcels by Shift (window_start)
+    # Group parcels by Shift (classify customer window_start into shift buckets)
     # deliveries index: 0:id, 4:weight, 5:service, 6:window_start, 7:window_end
     parcels_by_shift = {}
     for d in deliveries:
         w_start = d[6]
-        if w_start not in parcels_by_shift:
-            parcels_by_shift[w_start] = []
-        parcels_by_shift[w_start].append(d)
+        shift_key = _classify_to_shift(w_start)
+        if shift_key not in parcels_by_shift:
+            parcels_by_shift[shift_key] = []
+        parcels_by_shift[shift_key].append(d)
 
     # Sort shifts chronologically
     sorted_starts = sorted(parcels_by_shift.keys())

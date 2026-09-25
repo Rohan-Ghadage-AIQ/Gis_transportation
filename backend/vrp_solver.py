@@ -326,12 +326,13 @@ async def solve_vrp(warehouse_lon: float = 72.8724, warehouse_lat: float = 19.07
     time_dimension = routing.GetDimensionOrDie('Time')
     
     # Apply time windows
-    # Parcel deadlines are SOFT constraints — late delivery preferred over dropping
+    # window_start = HARD lower bound (customer not available before this time)
+    # window_end = SOFT upper bound (prefer delivery before deadline, penalize lateness)
     for i in range(1, size):
         index = manager.NodeToIndex(i)
         ws, deadline = node_windows[i]
-        # Hard range: allow delivery anytime within the overall shift window
-        time_dimension.CumulVar(index).SetRange(0, absolute_max)
+        # Hard range: delivery cannot happen before customer's window_start
+        time_dimension.CumulVar(index).SetRange(ws, absolute_max)
         # Soft penalty: strongly prefer delivery before the parcel's deadline
         time_dimension.SetCumulVarSoftUpperBound(index, deadline, 100000)
     
